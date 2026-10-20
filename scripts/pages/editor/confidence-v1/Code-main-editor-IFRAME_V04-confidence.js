@@ -4639,10 +4639,10 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.25-corriger-clair';
+  window.__agiloEditorConfidenceVersion = '1.09.26-correction-duree';
 
   const CORRECTION_POLL_MS = 5000;
-  const CORRECTION_WAIT_MS = 15 * 60 * 1000;
+  const CORRECTION_WAIT_MS = 30 * 60 * 1000;
   const CORRECTION_SPARKLE = '<path d="M6.65802 4.02597L5.39502 3.60495L4.97402 2.34195C4.83702 1.93395 4.16202 1.93395 4.02502 2.34195L3.60402 3.60495L2.34102 4.02597C2.13702 4.09397 1.99902 4.28497 1.99902 4.49997C1.99902 4.71497 2.13702 4.90597 2.34102 4.97397L3.60402 5.39499L4.02502 6.65799C4.09302 6.86199 4.28502 6.99997 4.50002 6.99997C4.71502 6.99997 4.90602 6.86199 4.97502 6.65799L5.39602 5.39499L6.65902 4.97397C6.86302 4.90597 7.00102 4.71497 7.00102 4.49997C7.00102 4.28497 6.86202 4.09397 6.65802 4.02597Z" fill="currentColor"/><path d="M15.658 13.026L14.395 12.605L13.974 11.3419C13.837 10.9339 13.162 10.9339 13.025 11.3419L12.604 12.605L11.341 13.026C11.137 13.094 10.999 13.285 10.999 13.5C10.999 13.715 11.137 13.906 11.341 13.974L12.604 14.395L13.025 15.658C13.093 15.862 13.285 16 13.5 16C13.715 16 13.906 15.862 13.975 15.658L14.396 14.395L15.659 13.974C15.863 13.906 16.001 13.715 16.001 13.5C16.001 13.285 15.862 13.094 15.658 13.026Z" fill="currentColor"/><path d="M6 8.75L6.671 11.329L9.25 12L6.671 12.671L6 15.25L5.329 12.671L2.75 12L5.329 11.329L6 8.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2.75L12.671 5.32898L15.25 6L12.671 6.67102L12 9.25L11.329 6.67102L8.75 6L11.329 5.32898L12 2.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
   const CORRECTION_REASONS = {
     droit: 'Vous n’avez pas accès à cette correction.',
@@ -4724,8 +4724,17 @@
     title.textContent = 'Correction en cours…';
     const subtitle = document.createElement('p');
     subtitle.className = 'loading-subtitle';
-    subtitle.textContent = 'Cela peut prendre quelques minutes.';
-    loader.append(anim, title, subtitle);
+    subtitle.textContent = correctionWaitSentence('running');
+    const progress = document.createElement('span');
+    progress.className = 'agilo-correction-progress';
+    progress.setAttribute('data-agilo-correction-progress', '');
+    progress.setAttribute('role', 'progressbar');
+    progress.setAttribute('aria-valuemin', '0');
+    progress.setAttribute('aria-valuemax', '100');
+    const bar = document.createElement('span');
+    bar.className = 'agilo-correction-progress__bar';
+    progress.appendChild(bar);
+    loader.append(anim, title, subtitle, progress);
     if (root.parentElement === host) host.insertBefore(loader, root);
     else host.prepend(loader);
     correctionStartLottie(anim);
@@ -4753,6 +4762,75 @@
     btn.style.borderRadius = box.borderRadius;
     btn.style.padding = box.padding;
   }
+  function correctionAudioMinutes() {
+    const root = editors.transcript || pickTranscriptEl();
+    if (!root) return 0;
+    let max = 0;
+    root.querySelectorAll('.ag-seg').forEach((art) => {
+      const end = Number(art.dataset.milliEnd);
+      if (Number.isFinite(end) && end > max) max = end;
+    });
+    return max / 60000;
+  }
+  function correctionEstimateMinutes(audioMinutes) {
+    if (!Number.isFinite(audioMinutes) || audioMinutes <= 0) return 0;
+    return Math.max(1, Math.round(audioMinutes * 10 / 131));
+  }
+  function correctionAudioLabel(audioMinutes) {
+    const total = Math.round(audioMinutes);
+    if (total < 60) return total + ' min';
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    return minutes ? hours + ' h ' + String(minutes).padStart(2, '0') : hours + ' h';
+  }
+  function correctionIdleHint(audioMinutes) {
+    if (!Number.isFinite(audioMinutes) || audioMinutes <= 0) return 'Cela peut prendre quelques minutes.';
+    if (audioMinutes < 20) return 'Environ 1 à 2 minutes.';
+    const estimate = correctionEstimateMinutes(audioMinutes);
+    const unit = estimate <= 1 ? 'minute' : 'minutes';
+    return 'Environ ' + estimate + ' ' + unit + ' pour ' + correctionAudioLabel(audioMinutes) + '.';
+  }
+  function correctionElapsedLabel(started) {
+    const elapsed = Date.now() - started;
+    if (!started || elapsed < 60000) return 'moins d’une minute';
+    const mins = Math.round(elapsed / 60000);
+    return mins <= 1 ? '1 min' : mins + ' min';
+  }
+  function correctionWaitSentence(mode) {
+    const audioMinutes = correctionAudioMinutes();
+    const estimate = correctionEstimateMinutes(audioMinutes);
+    if (mode !== 'running' || !correctionStarted) return correctionIdleHint(audioMinutes);
+    const elapsedText = correctionElapsedLabel(correctionStarted);
+    const elapsedMs = Date.now() - correctionStarted;
+    const over = estimate > 0 && elapsedMs > estimate * 60000;
+    if (!estimate) return 'En cours depuis ' + elapsedText + '.';
+    if (over) return 'Toujours en cours, un peu plus long que prévu. En cours depuis ' + elapsedText + '.';
+    if (audioMinutes < 20) return 'Environ 1 à 2 minutes. En cours depuis ' + elapsedText + '.';
+    const unit = estimate <= 1 ? 'minute' : 'minutes';
+    return 'Environ ' + estimate + ' ' + unit + '. En cours depuis ' + elapsedText + '.';
+  }
+  function correctionPaintWait(mode) {
+    const sentence = correctionWaitSentence(mode);
+    const hint = document.querySelector('.agilo-correction-hint');
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = sentence;
+    }
+    const audioMinutes = correctionAudioMinutes();
+    const estimate = correctionEstimateMinutes(audioMinutes);
+    const progress = document.querySelector('[data-agilo-correction-loader] [data-agilo-correction-progress]');
+    const bar = progress?.querySelector('.agilo-correction-progress__bar');
+    const subtitle = document.querySelector('[data-agilo-correction-loader] .loading-subtitle');
+    if (mode !== 'running' || !correctionStarted) return;
+    if (subtitle) subtitle.textContent = sentence;
+    if (!progress || !bar || !estimate) return;
+    const elapsedMs = Date.now() - correctionStarted;
+    const over = elapsedMs > estimate * 60000;
+    const pct = over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100)));
+    bar.style.width = pct + '%';
+    progress.setAttribute('aria-valuenow', String(pct));
+    progress.setAttribute('aria-valuetext', sentence);
+  }
   function correctionSetButton(mode) {
     const btn = document.querySelector('[data-agilo-correction]');
     if (!btn) return;
@@ -4761,20 +4839,33 @@
       btn.disabled = true;
       btn.setAttribute('aria-busy', 'true');
       btn.classList.add('is-running');
-      if (label) label.textContent = 'Correction en cours…';
+      if (label) label.textContent = 'Corriger';
       correctionShowWait();
+      correctionPaintWait('running');
     } else {
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
       btn.classList.remove('is-running');
       if (label) label.textContent = 'Corriger';
       correctionHideWait();
+      correctionPaintWait('idle');
     }
   }
+  let correctionDurationRoot = null;
+  let correctionDurationWatch = null;
   function correctionSyncVisibility() {
     const slot = document.querySelector('[data-agilo-correction-slot]');
     if (!slot) return;
     slot.hidden = EDITION !== 'ent' || !correctionOnTranscriptTab();
+    if (correctionStatus !== 'running') correctionPaintWait('idle');
+    const root = editors.transcript || pickTranscriptEl();
+    if (!root || root === correctionDurationRoot) return;
+    correctionDurationRoot = root;
+    correctionDurationWatch?.disconnect();
+    correctionDurationWatch = new MutationObserver(() => {
+      if (correctionStatus !== 'running') correctionPaintWait('idle');
+    });
+    correctionDurationWatch.observe(root, { childList: true });
   }
   function correctionStopPoll() {
     if (correctionTimer) clearTimeout(correctionTimer);
@@ -5069,6 +5160,7 @@
     fact.textContent = '« le le budget » devient « le budget ». « oui oui » reste, c’est une insistance. Un chiffre et une heure aussi.';
     box.append(fact);
     panel.append(box);
+    correctionAddLine(panel, correctionIdleHint(correctionAudioMinutes()));
     correctionAddLine(panel, 'Confirmer affiche la correction à l’écran. Cliquez ensuite sur Sauvegarder pour la garder. Si vous rechargez la page avant, le texte d’avant revient.');
     const downloadLine = document.createElement('p');
     downloadLine.className = 'aq-modal__line';
@@ -5166,7 +5258,10 @@
       btn.setAttribute('aria-label', 'Corriger la transcription');
       btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-spin" aria-hidden="true"></span><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
       btn.addEventListener('click', () => correctionOnButtonClick());
-      slot.append(btn);
+      const hint = document.createElement('p');
+      hint.className = 'agilo-correction-hint';
+      hint.textContent = 'Cela peut prendre quelques minutes.';
+      slot.append(btn, hint);
     }
     correctionMatchButton(slot.querySelector('[data-agilo-correction]'), save);
     const earlier = (save.compareDocumentPosition(anon) & Node.DOCUMENT_POSITION_FOLLOWING) ? save : anon;
@@ -5182,7 +5277,10 @@
       const style = document.createElement('style');
       style.id = 'agilo-correction-style';
       style.textContent = [
-        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;margin:0 8px 0 0;vertical-align:middle}',
+        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
+        '.agilo-correction-hint{margin:0;color:#525252;font-size:12px;line-height:1.3;max-width:16rem}',
+        '[data-agilo-correction-loader] .agilo-correction-progress{display:block;width:min(16rem,70%);height:4px;margin:0.85rem auto 0;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
+        '[data-agilo-correction-loader] .agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
         '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',

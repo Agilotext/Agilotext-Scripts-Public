@@ -7,7 +7,7 @@
 
   const DEFAULT_API_BASE = 'https://api.agilotext.com/api/v1';
   const STORAGE_HELPER_SEEN = 'agilo:confidence-helper-seen:v1';
-  const STORAGE_VISIBLE = 'agilo:confidence-visible:v1';
+  const STORAGE_VISIBLE = 'agilo:confidence-visible:v2';
   const LEVELS = new Set(['normal', 'verify', 'low']);
   const REVIEW_STATES = new Set(['pending', 'verified', 'ignored']);
 
@@ -21,13 +21,21 @@
   let __navIndex = -1;
   let __navKeys = [];
   let __transcriptRoot = null;
-  let __panelSentinel = null;
   let __panelFloatCleanup = null;
   let __panelFloatRefresh = null;
   let __keyboardBound = false;
   let __shellScrollGuardBound = false;
   let __shellScrollGuardHandler = null;
   let __shellScrollGuardDoc = null;
+  let __lastApply = {
+    jobId: '',
+    available: false,
+    reason: '',
+    segments: 0,
+    matched: 0
+  };
+  let __warnedApplyKey = '';
+  let __helperOpen = null;
 
   function debugLog(reason, details) {
     if (window.AGILO_DEBUG) {
@@ -56,7 +64,7 @@
   }
 
   function readConfidenceVisiblePreference() {
-    return storageGet(STORAGE_VISIBLE) !== 'false';
+    return storageGet(STORAGE_VISIBLE) === 'true';
   }
 
   function writeConfidenceVisiblePreference(visible) {
@@ -69,8 +77,52 @@
 
   function dismissHelper() {
     storageSet(STORAGE_HELPER_SEEN, 'true');
+    __helperOpen = false;
     const helper = document.getElementById('ag-confidence-helper');
     if (helper) helper.remove();
+    const helpBtn = document.getElementById('ag-confidence-help');
+    if (helpBtn) helpBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleHelperBanner() {
+    __helperOpen = !document.getElementById('ag-confidence-helper');
+    const root = getTranscriptRoot();
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    if (summary && root) renderConfidencePanel(root, summary);
+  }
+
+  const HELPER_TITLE = 'Passages à relire. Agilotext signale les passages où l’audio semble moins sûr.';
+
+  function buildToggleHtml(visible) {
+    const on = visible !== false;
+    return (
+      `<button type="button" class="ag-confidence-toggle${on ? ' is-on' : ''}" id="ag-confidence-toggle" role="switch"` +
+        ` aria-checked="${on ? 'true' : 'false'}"` +
+        ` aria-label="${on ? 'Masquer les passages à relire' : 'Afficher les passages à relire'}">` +
+        '<span class="ag-confidence-toggle__label">Surligner</span>' +
+        '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
+      '</button>'
+    );
+  }
+
+  function buildHelpButtonHtml(expanded) {
+    const open = expanded === true;
+    return (
+      `<button type="button" class="ag-confidence-help" id="ag-confidence-help"` +
+        ` aria-label="Pourquoi ces passages ?" title="${escapeAttr(HELPER_TITLE)}"` +
+        ` aria-expanded="${open ? 'true' : 'false'}" aria-controls="ag-confidence-helper">?</button>`
+    );
+  }
+
+  function buildHelperHtml() {
+    return (
+      '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
+        `<div class="ag-confidence-helper__copy">${escapeAttr(HELPER_TITLE)}</div>` +
+        '<span class="ag-confidence-helper__details" hidden>Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
+        '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
+        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
+      '</div>'
+    );
   }
 
   function pct(score) {
@@ -239,7 +291,14 @@
     if (pendingRisk <= 0 && originalRisk > 0) return 'Tous les passages signalés sont traités';
     if (pendingRisk <= 0) return 'Aucun passage signalé à relire';
     const main = plural(pendingRisk, 'passage à relire', 'passages à relire');
-    return priority > 0 ? `${main} · ${plural(priority, 'prioritaire', 'prioritaires')}` : main;
+    const prioWord = priority <= 1 ? 'prioritaire' : 'prioritaires';
+    return `${main} · ${priority} ${prioWord}`;
+  }
+
+  function chipMainLabel(pendingRisk) {
+    const n = Number(pendingRisk) || 0;
+    if (n <= 0) return 'Aucun passage à relire';
+    return n === 1 ? '1 passage à relire' : `${n} passages à relire`;
   }
 
   function qualityLabel(summary) {
@@ -247,7 +306,7 @@
   }
 
   function shouldShowHelper(summary) {
-    if (!isConfidenceEnabled() || !__confidenceVisible || isHelperSeen()) return false;
+    if (!isConfidenceEnabled() || isHelperSeen()) return false;
     return riskCount(summary) > 0;
   }
 
@@ -300,14 +359,25 @@
       null;
   }
 
+  function formatNavCount(keys, index, reconciledMap) {
+    if (!keys?.length) return '';
+    const map = reconciledMap || __reconciledMap;
+    const safeIndex = index < 0 ? 0 : Math.min(index, keys.length - 1);
+    const id = keys[safeIndex];
+    const isLow = map?.get?.(id)?.level === 'low';
+    const group = keys.filter((key) => (map?.get?.(key)?.level === 'low') === isLow);
+    const pos = group.indexOf(id);
+    const n = (pos < 0 ? 0 : pos) + 1;
+    if (isLow) {
+      return group.length <= 1 ? `${n}/${group.length} prioritaire` : `${n}/${group.length} prioritaires`;
+    }
+    return `${n}/${group.length} à relire`;
+  }
+
   function updateNavCount() {
     const countEl = document.getElementById('ag-confidence-nav-count');
     if (!countEl) return;
-    if (!__navKeys.length || __navIndex < 0) {
-      countEl.textContent = '';
-      return;
-    }
-    countEl.textContent = `Passage ${__navIndex + 1} / ${__navKeys.length}`;
+    countEl.textContent = formatNavCount(__navKeys, __navIndex, __reconciledMap);
   }
 
   function isEditableShortcutTarget(target) {
@@ -334,60 +404,6 @@
       if (e.key === 'ArrowRight') goToNextConfidenceZone();
       else goToPreviousConfidenceZone();
     });
-  }
-
-  function teardownPanelFloating() {
-    try { __panelFloatCleanup?.(); } catch { /* ignore */ }
-    __panelFloatCleanup = null;
-    __panelFloatRefresh = null;
-    if (__panelSentinel?.remove) __panelSentinel.remove();
-    __panelSentinel = null;
-  }
-
-  /**
-   * Bas de la chrome éditeur (onglets + toolbar) pour éviter qu'un panneau
-   * `position:fixed` recouvre Transcription / Compte rendu / Assistant.
-   */
-  function getEditorChromeBottom(doc = document) {
-    if (!doc?.querySelector) return 0;
-    const selectors = [
-      'main.ed-main nav.ed-tabs',
-      'main.ed-main [data-tour="ed-tabs"]',
-      'nav.ed-tabs',
-      'main.ed-main .ed-toolbar',
-      '.ed-toolbar'
-    ];
-    let bottom = 0;
-    selectors.forEach((sel) => {
-      const el = doc.querySelector(sel);
-      if (!el || typeof el.getBoundingClientRect !== 'function') return;
-      const rect = el.getBoundingClientRect();
-      if (rect && Number.isFinite(rect.bottom) && rect.height > 0) {
-        bottom = Math.max(bottom, rect.bottom);
-      }
-    });
-    return bottom;
-  }
-
-  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth) {
-    const safeChrome = Math.max(0, Number(chromeBottom) || 0);
-    const floatThreshold = Math.max(8, safeChrome + 4);
-    const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
-    const cLeft = Number(containerRect?.left) || 0;
-    const cWidth = Number(containerRect?.width) || 0;
-    const cBottom = Number(containerRect?.bottom) || 0;
-    const sTop = Number(sentinelRect?.top) || 0;
-    const shouldFloat = safeChrome > 0 && sTop < floatThreshold && cBottom > safeChrome + 72;
-    if (!shouldFloat) {
-      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
-    }
-    return {
-      shouldFloat: true,
-      left: Math.max(12, cLeft),
-      width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
-      top: safeChrome + 8,
-      chromeBottom: safeChrome
-    };
   }
 
   function isScrollableOverflow(value) {
@@ -610,51 +626,175 @@
     }
   }
 
-  function setupPanelFloating(panel, transcriptRoot) {
-    if (!panel || !transcriptRoot || !window?.addEventListener) return;
-    if (__panelFloatCleanup && __panelSentinel?.nextElementSibling === panel) {
+  function getEditorChromeBottom(doc = document) {
+    if (window.AgiloAudioSticky?.getEditorChromeBottom) {
+      return window.AgiloAudioSticky.getEditorChromeBottom(doc);
+    }
+    if (!doc?.querySelector) return 0;
+    const selectors = [
+      'main.ed-main nav.ed-tabs',
+      'main.ed-main [data-tour="ed-tabs"]',
+      'nav.ed-tabs',
+      '[role="tablist"]',
+      'main.ed-main .ed-toolbar',
+      '.ed-toolbar',
+      'header.ed-header',
+      '.ed-header'
+    ];
+    let bottom = 0;
+    selectors.forEach((sel) => {
+      const el = doc.querySelector(sel);
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      const rect = el.getBoundingClientRect();
+      if (rect && Number.isFinite(rect.bottom) && rect.height > 0) {
+        bottom = Math.max(bottom, rect.bottom);
+      }
+    });
+    return bottom;
+  }
+
+  function resolveConfidenceChromeBottom(chromeBottom, fallbacks = {}) {
+    if (window.AgiloAudioSticky?.resolveConfidenceChromeBottom) {
+      return window.AgiloAudioSticky.resolveConfidenceChromeBottom(chromeBottom, fallbacks);
+    }
+    const measured = Number(chromeBottom);
+    if (Number.isFinite(measured) && measured > 0) return measured;
+    const tabsBottom = Number(fallbacks.tabsBottom);
+    if (Number.isFinite(tabsBottom) && tabsBottom > 0) return tabsBottom;
+    const paneTop = Number(fallbacks.paneTop);
+    if (Number.isFinite(paneTop) && paneTop > 0) return Math.max(8, paneTop);
+    return 8;
+  }
+
+  function getConfidencePaneTop(el) {
+    const pane = el?.closest?.('#pane-transcript, .edtr-pane, .ag-panel') || el;
+    const top = pane?.getBoundingClientRect?.()?.top;
+    return Number.isFinite(top) ? top : 0;
+  }
+
+  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth, fallbacks) {
+    if (window.AgiloAudioSticky?.computeChromeDockFloatingBox) {
+      return window.AgiloAudioSticky.computeChromeDockFloatingBox(
+        sentinelRect, containerRect, chromeBottom, innerWidth, fallbacks
+      );
+    }
+    const measuredChrome = Math.max(0, Number(chromeBottom) || 0);
+    const safeChrome = resolveConfidenceChromeBottom(chromeBottom, fallbacks);
+    const floatThreshold = measuredChrome > 0 ? Math.max(8, measuredChrome + 4) : 8;
+    const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
+    const cLeft = Number(containerRect?.left) || 0;
+    const cWidth = Number(containerRect?.width) || 0;
+    const cBottom = Number(containerRect?.bottom) || 0;
+    const sTop = Number(sentinelRect?.top) || 0;
+    const shouldFloat = sTop < floatThreshold && cBottom > safeChrome + 72;
+    if (!shouldFloat) {
+      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
+    }
+    return {
+      shouldFloat: true,
+      left: Math.max(12, cLeft),
+      width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
+      top: safeChrome + 8,
+      chromeBottom: safeChrome
+    };
+  }
+
+  function ensureChromeDock() {
+    let dock = document.getElementById('ag-editor-chrome-dock');
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = 'ag-editor-chrome-dock';
+      dock.className = 'ag-editor-chrome-dock';
+    }
+    if (window.AgiloAudioSticky?.placeChromeDock) {
+      window.AgiloAudioSticky.placeChromeDock(dock, document);
+      return document.getElementById('ag-editor-chrome-dock') || dock;
+    }
+    if (dock.isConnected) return dock;
+    const pane = document.getElementById('pane-transcript');
+    const editor = document.getElementById('transcriptEditor');
+    if (pane && editor && editor.parentNode === pane) pane.insertBefore(dock, editor);
+    else if (pane) pane.insertBefore(dock, pane.firstChild || null);
+    else {
+      const root = getTranscriptRoot();
+      if (root?.parentElement) root.parentElement.insertBefore(dock, root);
+    }
+    return dock;
+  }
+
+  function placeConfidencePanel(panel) {
+    if (!panel) return false;
+    const dock = ensureChromeDock();
+    if (!dock) return false;
+    const audioRow = dock.querySelector?.('#ag-editor-audio-row');
+    if (audioRow) {
+      if (panel.parentNode !== dock || panel.nextElementSibling !== audioRow) {
+        dock.insertBefore(panel, audioRow);
+      }
+    } else if (panel.parentNode !== dock) {
+      dock.insertBefore(panel, dock.firstChild || null);
+    }
+    return true;
+  }
+
+  function teardownChromeDockFloating() {
+    try { __panelFloatCleanup?.(); } catch { /* ignore */ }
+    __panelFloatCleanup = null;
+    __panelFloatRefresh = null;
+  }
+
+  function setupChromeDockFloating(target, transcriptRoot) {
+    if (!target || !window?.addEventListener) return;
+    if (window.AgiloAudioSticky && !window.AGILO_AUDIO_STICKY_SKIP_BOOT) {
+      return;
+    }
+    if (__panelFloatCleanup && target.classList?.contains?.('ag-editor-chrome-dock')) {
       try { __panelFloatRefresh?.(); } catch { /* ignore */ }
       return;
     }
+    teardownChromeDockFloating();
 
-    teardownPanelFloating();
-
-    const sentinel = document.createElement('span');
-    sentinel.className = 'ag-confidence-panel-sentinel';
-    panel.parentElement?.insertBefore(sentinel, panel);
-    __panelSentinel = sentinel;
+    let mark = target.previousElementSibling;
+    if (!mark || !String(mark.className || '').includes('sentinel')) {
+      mark = document.createElement('span');
+      mark.className = 'ag-editor-chrome-dock-sentinel';
+      target.parentElement?.insertBefore(mark, target);
+    }
 
     const clearFloatingVars = () => {
-      panel.style.removeProperty('--ag-confidence-floating-left');
-      panel.style.removeProperty('--ag-confidence-floating-width');
-      panel.style.removeProperty('--ag-confidence-floating-top');
+      target.style.removeProperty('--ag-confidence-floating-left');
+      target.style.removeProperty('--ag-confidence-floating-width');
+      target.style.removeProperty('--ag-confidence-floating-top');
     };
 
     const update = () => {
-      if (!__confidenceVisible || !panel.isConnected || !sentinel.isConnected) {
-        panel.classList.remove('is-floating');
+      if (!target.isConnected || !mark.isConnected) {
+        target.classList.remove('is-floating');
         clearFloatingVars();
         return;
       }
-
-      const sRect = sentinel.getBoundingClientRect();
-      const container = transcriptRoot.parentElement || transcriptRoot;
-      const cRect = container.getBoundingClientRect();
+      const sRect = mark.getBoundingClientRect();
+      const container = transcriptRoot?.parentElement || transcriptRoot || target.parentElement;
+      const cRect = container?.getBoundingClientRect?.() || { left: 16, width: 760, bottom: 800 };
+      const measuredChrome = getEditorChromeBottom(document);
       const box = computeConfidenceFloatingBox(
         sRect,
         cRect,
-        getEditorChromeBottom(document),
-        window.innerWidth
+        measuredChrome,
+        window.innerWidth,
+        {
+          tabsBottom: measuredChrome,
+          paneTop: getConfidencePaneTop(transcriptRoot || target)
+        }
       );
-
       if (box.shouldFloat) {
-        panel.style.setProperty('--ag-confidence-floating-left', `${box.left}px`);
-        panel.style.setProperty('--ag-confidence-floating-width', `${box.width}px`);
-        panel.style.setProperty('--ag-confidence-floating-top', `${box.top}px`);
+        target.style.setProperty('--ag-confidence-floating-left', `${box.left}px`);
+        target.style.setProperty('--ag-confidence-floating-width', `${box.width}px`);
+        target.style.setProperty('--ag-confidence-floating-top', `${box.top}px`);
       } else {
         clearFloatingVars();
       }
-      panel.classList.toggle('is-floating', box.shouldFloat);
+      target.classList.toggle('is-floating', box.shouldFloat);
     };
 
     let raf = 0;
@@ -672,19 +812,21 @@
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
     schedule();
-
     __panelFloatRefresh = schedule;
     __panelFloatCleanup = () => {
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
       if (raf && window.cancelAnimationFrame) window.cancelAnimationFrame(raf);
-      else if (raf) clearTimeout(raf);
-      panel.classList.remove('is-floating');
-      panel.style.removeProperty('--ag-confidence-floating-left');
-      panel.style.removeProperty('--ag-confidence-floating-width');
-      panel.style.removeProperty('--ag-confidence-floating-top');
+      target.classList.remove('is-floating');
+      clearFloatingVars();
       __panelFloatRefresh = null;
     };
+  }
+
+  function removeConfidencePanel() {
+    const panel = document.getElementById('ag-confidence-panel');
+    if (panel) panel.remove();
+    document.getElementById('ag-confidence-chip-host')?.remove();
   }
 
   function setReviewState(segId, state) {
@@ -698,8 +840,19 @@
     const art = root?.querySelector?.(`.ag-seg[data-id="${CSS.escape(key)}"]`);
     if (art && item) decorateSegmentWithConfidence(art, item, item.segmentIndex);
 
-    __navIndex = -1;
+    const activeId = __navIndex >= 0 ? __navKeys[__navIndex] : '';
+    const oldPos = __navKeys.indexOf(key);
     __navKeys = buildNavigationOrder(__reconciledMap);
+    if (!__navKeys.length) {
+      __navIndex = -1;
+    } else if (activeId && activeId !== key && __navKeys.includes(activeId)) {
+      __navIndex = __navKeys.indexOf(activeId);
+    } else if (activeId === key) {
+      __navIndex = Math.min(Math.max(oldPos, 0), __navKeys.length - 1);
+      activateNavTarget(__navKeys[__navIndex]);
+    } else {
+      __navIndex = -1;
+    }
     updateNavCount();
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary && root) renderConfidencePanel(root, summary);
@@ -728,9 +881,8 @@
     if (root) {
       root.querySelectorAll('.ag-seg').forEach(removeSegmentConfidenceDecorations);
     }
-    const panel = document.getElementById('ag-confidence-panel');
-    if (panel) panel.remove();
-    teardownPanelFloating();
+    removeConfidencePanel();
+    __helperOpen = null;
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
@@ -951,8 +1103,7 @@
     return entries
       .filter(([_, item]) => {
         if (isReviewed(item.segmentId)) return false;
-        if (item.level === 'low' || item.level === 'verify') return true;
-        return isSegmentModified(item, item.segmentIndex);
+        return item.level === 'low' || item.level === 'verify';
       })
       .map(([key]) => key);
   }
@@ -985,6 +1136,7 @@
   }
 
   function goToNextConfidenceZone() {
+    if (!__confidenceVisible) return;
     if (!__navKeys.length) {
       __navKeys = buildNavigationOrder(__reconciledMap);
     }
@@ -996,6 +1148,7 @@
   }
 
   function goToPreviousConfidenceZone() {
+    if (!__confidenceVisible) return;
     if (!__navKeys.length) {
       __navKeys = buildNavigationOrder(__reconciledMap);
     }
@@ -1008,31 +1161,43 @@
 
   /**
    * Groupe nav panneau : Passage précédent · compteur · Passage suivant.
-   * Navigation circulaire (alignée Alt+← / Alt+→). Prev secondaire, Next primary.
    */
-  function buildNavControlsHtml(hasPendingRisk) {
+  const CHEVRON_LEFT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+  const CHEVRON_RIGHT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+
+  function buildNavControlsHtml(hasPendingRisk, navEnabled) {
     if (!hasPendingRisk) return '';
+    const on = navEnabled !== false;
+    const disabledAttrs = on ? '' : ' disabled aria-disabled="true"';
+    const nextClass = on
+      ? 'ag-confidence-panel__btn ag-confidence-panel__btn--primary ag-confidence-panel__btn--icon'
+      : 'ag-confidence-panel__btn ag-confidence-panel__btn--icon';
     return (
       '<span class="ag-confidence-panel__nav" role="group" aria-label="Navigation passages à relire">' +
-        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-prev"' +
+        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--icon" id="ag-confidence-prev"' +
           ' aria-label="Passage précédent" aria-keyshortcuts="Alt+ArrowLeft"' +
-          ' title="Passage précédent (Alt+←) · boucle en début de liste">' +
-          '<span class="ag-confidence-panel__btn-text">Passage précédent</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">←</span>' +
+          ` title="${on ? 'Passage précédent (Alt+←)' : 'Activez Surligner pour naviguer'}"${disabledAttrs}>` +
+          `<span class="ag-confidence-panel__btn-icon">${CHEVRON_LEFT_SVG}</span>` +
         '</button>' +
         '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
-        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next"' +
+        `<button type="button" class="${nextClass}" id="ag-confidence-next"` +
           ' aria-label="Passage suivant" aria-keyshortcuts="Alt+ArrowRight"' +
-          ' title="Passage suivant (Alt+→)">' +
-          '<span class="ag-confidence-panel__btn-text">Passage suivant</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">→</span>' +
+          ` title="${on ? 'Passage suivant (Alt+→)' : 'Activez Surligner pour naviguer'}"${disabledAttrs}>` +
+          `<span class="ag-confidence-panel__btn-icon">${CHEVRON_RIGHT_SVG}</span>` +
         '</button>' +
       '</span>'
     );
   }
 
   function renderConfidencePanel(transcriptRoot, summary) {
-    if (!transcriptRoot || !summary) return null;
+    if (!summary) {
+      removeConfidencePanel();
+      bindKeyboardShortcuts();
+      return null;
+    }
+    document.getElementById('ag-confidence-chip-host')?.remove();
 
     let panel = document.getElementById('ag-confidence-panel');
     if (!panel) {
@@ -1040,8 +1205,10 @@
       panel.id = 'ag-confidence-panel';
       panel.className = 'ag-confidence-panel';
       panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Confidence transcription');
-      transcriptRoot.parentElement?.insertBefore(panel, transcriptRoot);
+      panel.setAttribute('aria-label', 'Passages à relire');
+    }
+    if (!placeConfidencePanel(panel) && transcriptRoot?.parentElement) {
+      transcriptRoot.parentElement.insertBefore(panel, transcriptRoot);
     }
 
     const display = effectivePanelSummary(summary);
@@ -1051,38 +1218,19 @@
     const modifiedStat = modifiedCount > 0
       ? `<span class="ag-confidence-panel__stat">${plural(modifiedCount, 'modifié', 'modifiés')}</span>`
       : '';
-    const toggleHtml =
-      `<button type="button" class="ag-confidence-toggle" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}">` +
-      '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
-      '<span class="ag-confidence-toggle__label">Passages à relire</span>' +
-      '</button>';
+    if (__helperOpen == null) __helperOpen = shouldShowHelper(display);
+    const showHelper = hasPendingRisk && __helperOpen === true;
+    const actionsHtml = hasPendingRisk
+      ? `<span class="ag-confidence-panel__actions">${buildHelpButtonHtml(showHelper)}${buildToggleHtml(__confidenceVisible)}</span>`
+      : `<span class="ag-confidence-panel__actions">${buildToggleHtml(__confidenceVisible)}</span>`;
 
-    if (__confidenceVisible) {
-      const helperHtml = hasPendingRisk && shouldShowHelper(display)
-        ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
-            '<div class="ag-confidence-helper__copy">' +
-              '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
-              '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
-              '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages.</span>' +
-            '</div>' +
-            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
-            '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
-          '</div>'
-        : '';
-
-      panel.innerHTML =
-        `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
-        `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
-        modifiedStat +
-        buildNavControlsHtml(hasPendingRisk) +
-        toggleHtml +
-        helperHtml;
-    } else {
-      panel.innerHTML =
-        '<span class="ag-confidence-panel__main">Passages à relire masqués</span>' +
-        '<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">Réactivez-les pour relire les passages moins sûrs.</span>' +
-        toggleHtml;
-    }
+    panel.innerHTML =
+      `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
+      `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
+      modifiedStat +
+      buildNavControlsHtml(hasPendingRisk, __confidenceVisible) +
+      actionsHtml +
+      (showHelper ? buildHelperHtml() : '');
 
     panel.querySelector('#ag-confidence-prev')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
@@ -1099,6 +1247,11 @@
       e?.stopPropagation?.();
       toggleUserConfidenceVisible();
     });
+    panel.querySelector('#ag-confidence-help')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      toggleHelperBanner();
+    });
     panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
@@ -1114,7 +1267,8 @@
     });
 
     panel.classList.toggle('is-disabled', !__confidenceVisible);
-    setupPanelFloating(panel, transcriptRoot);
+    const dock = document.getElementById('ag-editor-chrome-dock') || panel;
+    setupChromeDockFloating(dock, transcriptRoot);
     bindKeyboardShortcuts();
     updateNavCount();
     return panel;
@@ -1123,33 +1277,21 @@
   function setConfidenceVisible(visible, persist = false) {
     __confidenceVisible = visible !== false;
     if (persist) writeConfidenceVisiblePreference(__confidenceVisible);
-    const panel = document.getElementById('ag-confidence-panel');
-    if (panel) {
-      if (!__confidenceVisible) {
-        panel.classList.remove('is-floating');
-        panel.style.removeProperty('--ag-confidence-floating-left');
-        panel.style.removeProperty('--ag-confidence-floating-width');
-        panel.style.removeProperty('--ag-confidence-floating-top');
-      }
-    }
 
     const root = getTranscriptRoot();
-    if (!root) {
-      ensureActiveEditorPane(document);
-      return;
+    if (root) {
+      root.querySelectorAll('.ag-seg').forEach((art) => {
+        const segId = art.dataset.id || '';
+        const item = __reconciledMap.get(segId);
+        if (!item) return;
+
+        if (__confidenceVisible) {
+          decorateSegmentWithConfidence(art, item, item.segmentIndex);
+        } else {
+          removeSegmentConfidenceDecorations(art);
+        }
+      });
     }
-
-    root.querySelectorAll('.ag-seg').forEach((art) => {
-      const segId = art.dataset.id || '';
-      const item = __reconciledMap.get(segId);
-      if (!item) return;
-
-      if (__confidenceVisible) {
-        decorateSegmentWithConfidence(art, item, item.segmentIndex);
-      } else {
-        removeSegmentConfidenceDecorations(art);
-      }
-    });
 
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary) renderConfidencePanel(root, summary);
@@ -1226,22 +1368,40 @@
     mainSegments,
     transcriptRoot
   }) {
+    const id = String(jobId || '');
+    const segmentsCount = Array.isArray(confidenceJson?.segmentsConfidence)
+      ? confidenceJson.segmentsConfidence.length
+      : 0;
+
+    const fail = (reason) => {
+      __lastApply = {
+        jobId: id,
+        available: confidenceJson?.available === true,
+        reason,
+        segments: segmentsCount,
+        matched: 0
+      };
+      warnNotApplied(id, reason);
+      removeConfidencePanel();
+      return { applied: false, reason };
+    };
+
     if (String(confidenceJson?.jobId) !== String(jobId) && confidenceJson?.jobId != null) {
       debugLog('jobId mismatch', { expected: jobId, got: confidenceJson.jobId });
-      return { applied: false, reason: 'jobId_mismatch' };
+      return fail('jobId_mismatch');
     }
 
     if (!confidenceJson || confidenceJson.available !== true) {
-      return { applied: false, reason: 'unavailable' };
+      return fail('unavailable');
     }
 
     if (!Array.isArray(confidenceJson.segmentsConfidence)) {
-      return { applied: false, reason: 'no_segments' };
+      return fail('no_segments');
     }
 
     const reconciled = reconcileConfidenceSegments(mainSegments, confidenceJson);
     if (!reconciled.size) {
-      return { applied: false, reason: 'no_matches' };
+      return fail('no_matches');
     }
 
     __confidenceJson = confidenceJson;
@@ -1256,9 +1416,43 @@
 
     const summary = getSummaryDisplay(confidenceJson, 0);
     renderConfidencePanel(transcriptRoot, summary);
-    applyConfidenceToDom(transcriptRoot, reconciled);
+    if (__confidenceVisible) applyConfidenceToDom(transcriptRoot, reconciled);
+
+    __lastApply = {
+      jobId: String(jobId),
+      available: true,
+      reason: 'applied',
+      segments: segmentsCount,
+      matched: reconciled.size
+    };
 
     return { applied: true, count: reconciled.size };
+  }
+
+  function warnNotApplied(jobId, reason) {
+    const key = `${String(jobId || '')}:${String(reason || '')}`;
+    if (__warnedApplyKey === key) return;
+    __warnedApplyKey = key;
+    try {
+      console.warn('[agilo:confidence] non applique', { jobId: String(jobId || ''), reason });
+    } catch {
+      /* ignore sandbox without console */
+    }
+  }
+
+  function getDebugState() {
+    const panel = document.getElementById('ag-confidence-panel');
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    const pending = summary ? riskCount(effectivePanelSummary(summary)) : 0;
+    return {
+      jobId: __currentJobId || __lastApply.jobId || '',
+      available: __lastApply.available === true,
+      reason: __lastApply.reason || '',
+      segments: __lastApply.segments || 0,
+      matched: __lastApply.matched || 0,
+      pending,
+      panel: !!(panel && panel.isConnected)
+    };
   }
 
   async function reloadConfidenceForCurrentJob(opts = {}) {
@@ -1377,15 +1571,21 @@
     toggle: setConfidenceVisible,
     toggleUserConfidenceVisible,
     dismissHelper,
+    toggleHelperBanner,
     // API interne / tests
     isConfidenceEnabled,
     fetchConfidenceJson,
     reconcileConfidenceSegments,
     computeSummaryFallback,
     buildNavigationOrder,
+    formatNavCount,
     buildNavControlsHtml,
+    buildToggleHtml,
+    buildHelpButtonHtml,
+    buildHelperHtml,
     badgeLabel,
     panelMainLabel,
+    chipMainLabel,
     qualityLabel,
     textHash,
     normalizeWordIssues,
@@ -1403,7 +1603,11 @@
     goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex,
     getEditorChromeBottom,
+    resolveConfidenceChromeBottom,
     computeConfidenceFloatingBox,
+    setupChromeDockFloating,
+    ensureChromeDock,
+    getDebugState,
     ensureActiveEditorPane,
     findConfidenceScrollContainer,
     scrollSegmentIntoView,
