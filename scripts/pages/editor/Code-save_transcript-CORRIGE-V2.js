@@ -13,7 +13,7 @@
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
   const READ_ENDPOINT = API_BASE + '/receiveTextJson';
   const TOKEN_GET = API_BASE + '/getToken';
-  const VERSION   = 'save-manual-simple-v1.3-intervenant';
+  const VERSION   = 'save-manual-simple-v1.4-restore-notice';
   const REQUEST_TIMEOUT_MS = 45000;
 
   const MIN_CONTENT_LENGTH = 10;  // min caractères pour considérer qu'il y a un transcript
@@ -525,6 +525,14 @@
     return tab ? tab.id || '' : '';
   }
 
+  function transcriptBlockReason(){
+    const root = getTranscriptRoot();
+    if (!root) return null;
+    if (root.querySelector('.ag-alert, .ag-alert--warn')) return 'alert';
+    if (root.getAttribute('aria-busy') === 'true' || root.querySelector('.ag-loader,[data-loading="true"]')) return 'loading';
+    return null;
+  }
+
   async function doSave(btn, options){
     options = options || {};
     const silent = !!options.silent;
@@ -534,7 +542,21 @@
       else alert(msg);
     }
     if (window.__agiloTranscriptHistoryRestoring && !options.history) {
-      return { ok:false, reason:'restore_in_progress' };
+      const stamp = window.__agiloTranscriptHistoryRestoreId || 1;
+      if (window.__agiloSaveRestoreNoticeId !== stamp) {
+        window.__agiloSaveRestoreNoticeId = stamp;
+        userNotice('Retour à une transcription précédente en cours. Sauvegarder redevient disponible dès que le texte est affiché.');
+      }
+      return { ok:false, reason:'restore_in_progress', verified:false };
+    }
+    const blocked = transcriptBlockReason();
+    if (blocked === 'loading') {
+      userNotice('La transcription est encore en cours de chargement. Sauvegarder sera possible dès qu’elle est affichée.');
+      return { ok:false, reason:'loading', verified:false };
+    }
+    if (blocked === 'alert') {
+      userNotice('Une erreur est affichée dans la transcription. La sauvegarde est annulée.');
+      return { ok:false, reason:'error_message_displayed', verified:false };
     }
     if (isSaving) {
       log('save déjà en cours, ignoré');
@@ -573,7 +595,9 @@
       // 2) Vérifier que le transcript est chargé
       const ready = await waitTranscriptReady();
       if (!ready.ready){
-        const msg = 'Transcript non prêt ou vide. Attendez la fin du chargement avant de sauvegarder.';
+        const msg = ready.reason === 'error_message_displayed'
+          ? 'Une erreur est affichée dans la transcription. La sauvegarde est annulée.'
+          : 'Transcript non prêt ou vide. Attendez la fin du chargement avant de sauvegarder.';
         console.warn('[agilo:save] transcript pas prêt', ready);
         if (btn) btn.textContent = btn.__idleText;
         userNotice(msg);
@@ -647,7 +671,9 @@
       if (btn) {
         btn.textContent = dirtyAfterSave ? 'Modifications à sauvegarder' : 'Sauvegardé ✓';
         setTimeout(() => {
-          if (!isSaving) btn.textContent = btn.__idleText;
+          if (isSaving || window.__agiloTranscriptHistoryRestoring) return;
+          if ((btn.textContent || '').trim() === 'Retour en cours…') return;
+          btn.textContent = btn.__idleText;
         }, 2000);
       }
       if (btn) announce(recoveredAfterError ? 'Modification enregistrée et vérifiée après une interruption réseau.' : 'Modification sauvegardée et vérifiée.');

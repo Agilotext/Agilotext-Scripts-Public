@@ -3,7 +3,7 @@
   'use strict';
 
   if (window.__agiloTranscriptHistoryVersion) return;
-  window.__agiloTranscriptHistoryVersion = '1.1.0-tab';
+  window.__agiloTranscriptHistoryVersion = '1.1.1-restore-lock';
 
   const API = 'https://api.agilotext.com/api/v1';
   const ROOT_ID = 'agilo-tx-hist';
@@ -334,11 +334,29 @@
     return target;
   }
 
+  function saveButton() {
+    return document.querySelector(ANCHOR) || document.querySelector('button.button.save');
+  }
+  function markSaveReturning() {
+    const button = saveButton();
+    if (!button) return;
+    if (!button.__idleText) button.__idleText = (button.textContent || '').trim() || 'Sauvegarder';
+    button.textContent = 'Retour en cours…';
+  }
+  function clearSaveReturning() {
+    const button = saveButton();
+    if (!button) return;
+    if ((button.textContent || '').trim() !== 'Retour en cours…') return;
+    button.textContent = button.__idleText || 'Sauvegarder';
+  }
+
   async function restore(row) {
     const auth = creds();
     if (!row || !auth || busy() || !baseline || baselineJobId !== auth.jobId || !isTranscriptVisible()) return;
     restoring = true;
     window.__agiloTranscriptHistoryRestoring = true;
+    window.__agiloTranscriptHistoryRestoreId = (window.__agiloTranscriptHistoryRestoreId || 0) + 1;
+    markSaveReturning();
     let serverWritten = false;
     render();
     try {
@@ -369,11 +387,19 @@
         finish: () => window.agiloFinishTranscriptRestore(auth.jobId),
         checkJob: () => { if (creds()?.jobId !== auth.jobId) throw new Error('job_changed'); }
       });
+      window.__agiloTranscriptHistoryRestoring = false;
+      clearSaveReturning();
       window.dispatchEvent(new CustomEvent('agilo:transcript-restored', {
         detail: { jobId: auth.jobId, savedTranscriptIndex: row.index }
       }));
-      await fetchList(auth);
-      announce('Transcription restaurée. Régénérez le compte-rendu si nécessaire.');
+      let listOk = true;
+      try { await fetchList(auth); }
+      catch (listError) {
+        listOk = false;
+        announce('Transcription restaurée. L’historique n’a pas pu se rafraîchir.');
+        console.warn('[agilo:tx-history] list refresh failed:', listError.message);
+      }
+      if (listOk) announce('Transcription restaurée. Régénérez le compte-rendu si nécessaire.');
     } catch (error) {
       const messages = {
         slot_changed: 'Cette sauvegarde a changé. Ouvrez à nouveau l’historique.',
@@ -382,7 +408,13 @@
         presave_failed: 'La version actuelle n’a pas pu être sauvegardée. Aucun retour effectué.',
         error_transcript_not_ready: 'Le compte-rendu est en préparation. Réessayez lorsque la transcription est prête.',
         reload_timeout: 'Le serveur a enregistré le retour, mais l’éditeur ne s’est pas rechargé. Rechargez la page.',
-        reload_mismatch: 'Le retour est enregistré, mais le contenu affiché ne correspond pas. Rechargez la page.'
+        reload_mismatch: 'Le retour est enregistré, mais le contenu affiché ne correspond pas. Rechargez la page.',
+        save_unavailable: 'La sauvegarde n’est pas disponible sur cette page. Rechargez l’éditeur.',
+        transcript_invalid: 'Cette sauvegarde est illisible. La transcription actuelle reste affichée.',
+        transcript_empty: 'Cette sauvegarde est illisible. La transcription actuelle reste affichée.',
+        credentials_missing: 'Session incomplète. Rechargez la page.',
+        history_unavailable: 'L’historique est indisponible. Réessayez.',
+        history_invalid: 'L’historique est indisponible. Réessayez.'
       };
       announce(messages[error.message] || (serverWritten
         ? 'Le retour est enregistré, mais la vérification a échoué. Rechargez la page.'
@@ -392,6 +424,7 @@
     } finally {
       restoring = false;
       window.__agiloTranscriptHistoryRestoring = false;
+      clearSaveReturning();
       setOpen(false);
       render();
     }

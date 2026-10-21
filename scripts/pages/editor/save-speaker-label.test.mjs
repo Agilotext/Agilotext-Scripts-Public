@@ -42,7 +42,7 @@ test('libellé machine affiché en français, prénom inchangé', () => {
 
 test('la sauvegarde accepte Intervenant et refuse un autre nom', () => {
   assert.equal(src.includes('shownSpeaker === displaySpeakerLabel(speaker)'), true);
-  assert.equal(src.includes('save-manual-simple-v1.3-intervenant'), true);
+  assert.equal(src.includes('save-manual-simple-v1.4-restore-notice'), true);
   assert.equal(src.includes('return { id, startSec, endSec, speaker,'), true);
   assert.equal(labelOk('Speaker_A', 'Intervenant 1'), true);
   assert.equal(labelOk('Marie', 'Marie'), true);
