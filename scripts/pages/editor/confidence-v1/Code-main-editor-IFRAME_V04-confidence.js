@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.30-correction-dock';
+  window.__agiloEditorConfidenceVersion = '1.09.31-correction-autosave';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4981,7 +4981,7 @@
     const model = Array.isArray(window._segments) ? window._segments : null;
     if (!root || !incoming || !model || incoming.length !== arts.length || model.length !== arts.length) {
       toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
-      return;
+      return null;
     }
     for (let i = 0; i < arts.length; i++) {
       const seg = incoming[i] || {};
@@ -4989,14 +4989,14 @@
       const id = seg.id != null ? String(seg.id) : '';
       if (String(art.dataset.id || '') !== id || String(model[i]?.id || '') !== id) {
         toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
-        return;
+        return null;
       }
       if (!correctionSameBound(art, 'milliStart', seg.milli_start) || !correctionSameBound(art, 'milliEnd', seg.milli_end)) {
         toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
-        return;
+        return null;
       }
     }
-    if (jobId !== correctionJobId()) return;
+    if (jobId !== correctionJobId()) return null;
     let changed = 0;
     incoming.forEach((seg, i) => {
       const next = decodeNL(seg.text);
@@ -5012,14 +5012,65 @@
       arts[i].classList.add('is-flash');
       setTimeout(() => arts[i].classList.remove('is-flash'), 2000);
     });
-    correctionReadyJob = jobId;
-    correctionErrorJob = '';
-    correctionErrorReason = '';
-    if (!changed) {
-      correctionOpenNotice('done');
+    return { changed };
+  }
+  function correctionFreezeTexts(root) {
+    const saved = [];
+    if (!root) return saved;
+    const nodes = [root, ...root.querySelectorAll('.ag-seg__text')];
+    nodes.forEach((node) => {
+      const value = node.getAttribute('contenteditable');
+      if (node === root && value !== 'true') return;
+      saved.push({ node, value });
+      node.setAttribute('contenteditable', 'false');
+    });
+    return saved;
+  }
+  function correctionThawTexts(saved) {
+    saved.forEach(({ node, value }) => {
+      if (!node.isConnected) return;
+      if (value == null) node.removeAttribute('contenteditable');
+      else node.setAttribute('contenteditable', value);
+    });
+  }
+  function correctionSaveFailedToast() {
+    toast('La correction est affichée. Cliquez sur Sauvegarder.');
+  }
+  async function correctionSaveNow() {
+    const save = window.agiloSaveNow;
+    if (typeof save !== 'function') return { ok: false, reason: 'missing' };
+    let result;
+    try { result = await save({ ignoreTab: true }); }
+    catch { return { ok: false, reason: 'save_failed' }; }
+    if (result && result.reason === 'already_saving') {
+      const started = Date.now();
+      while (window.__agiloSaveInProgress && Date.now() - started < 20000) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      try { result = await save({ ignoreTab: true }); }
+      catch { return { ok: false, reason: 'save_failed' }; }
+    }
+    return result || { ok: false };
+  }
+  async function correctionPersistReady(epoch, jobId, changed) {
+    if (document.querySelector('.agilo-anon-banner.is-visible')) {
+      correctionSaveFailedToast();
       return;
     }
-    toast('Version corrigée affichée. Sauvegardez pour la garder. Rechargez la page pour retrouver le texte d’avant, tant que vous n’avez pas sauvegardé.');
+    const root = editors.transcript || pickTranscriptEl();
+    const frozen = correctionFreezeTexts(root);
+    let result;
+    try { result = await correctionSaveNow(); }
+    finally { correctionThawTexts(frozen); }
+    if (epoch !== correctionEpoch || jobId !== correctionJobId()) return;
+    if (result && result.ok && result.verified) {
+      correctionReadyJob = jobId;
+      correctionErrorJob = '';
+      correctionErrorReason = '';
+      if (!changed) correctionOpenNotice('done');
+      return;
+    }
+    correctionSaveFailedToast();
   }
   async function correctionAsk(fromClick) {
     if (EDITION !== 'ent') return;
@@ -5095,7 +5146,9 @@
         toast('Enregistrez ou abandonnez vos modifications d’abord.');
         return;
       }
-      correctionApply(payload, jobId);
+      const applied = correctionApply(payload, jobId);
+      if (!applied) return;
+      await correctionPersistReady(epoch, jobId, applied.changed);
       return;
     }
     if (status === 'error') {
@@ -5241,7 +5294,7 @@
     box.append(fact);
     panel.append(box);
     correctionAddLine(panel, correctionIdleHint(correctionAudioMinutes()));
-    correctionAddLine(panel, 'Confirmer affiche la correction à l’écran. Cliquez ensuite sur Sauvegarder pour la garder. Si vous rechargez la page avant, le texte d’avant revient.');
+    correctionAddLine(panel, 'Confirmer lance la correction. Quand elle est prête, elle est enregistrée automatiquement.');
     const downloadLine = document.createElement('p');
     downloadLine.className = 'aq-modal__line';
     downloadLine.append(document.createTextNode('Télécharger le fichier enregistré, pas les retouches encore à l’écran.'));
