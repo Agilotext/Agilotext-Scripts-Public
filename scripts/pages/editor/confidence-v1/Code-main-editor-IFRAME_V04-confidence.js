@@ -1044,13 +1044,22 @@
     if (document.getElementById('agilo-toast-style')) return;
     const style = document.createElement('style');
     style.id = 'agilo-toast-style';
-    style.textContent = '#toaster.ag-toasts,#ag-toasts.ag-toasts{position:fixed;right:16px;bottom:16px;z-index:100002;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:min(18rem,calc(100vw - 32px));margin:0;pointer-events:none}#toaster .toast,#ag-toasts .toast{pointer-events:auto;margin:0;background:#020202;color:#fff;border-radius:8px;padding:10px 14px;font:500 13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;box-shadow:0 8px 24px rgba(2,2,2,.18)}';
+    style.textContent = '#toaster,#ag-toasts{position:fixed !important;left:auto !important;right:16px !important;bottom:16px !important;top:auto !important;width:max-content !important;max-width:min(18rem,calc(100vw - 32px)) !important;z-index:100002 !important;display:flex !important;flex-direction:column;align-items:flex-end;gap:8px;margin:0 !important;transform:none !important;pointer-events:none}#toaster .toast,#ag-toasts .toast{pointer-events:auto;margin:0;background:#020202;color:#fff;border-radius:8px;padding:10px 14px;font:500 13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;box-shadow:0 8px 24px rgba(2,2,2,.18)}#toaster .agilo-correction-progress,#ag-toasts .agilo-correction-progress{display:block;width:100%;height:4px;margin-top:8px;border-radius:999px;background:rgba(255,255,255,.28);overflow:hidden}#toaster .agilo-correction-progress__bar,#ag-toasts .agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#fff}';
     document.head.appendChild(style);
+  }
+  function placeToaster(tRoot) {
+    if (!tRoot) return;
+    if (tRoot.parentElement !== document.body) document.body.appendChild(tRoot);
+    tRoot.classList.add('ag-toasts');
+    ['position', 'fixed', 'left', 'auto', 'right', '16px', 'bottom', '16px', 'top', 'auto', 'width', 'max-content', 'max-width', 'min(18rem, calc(100vw - 32px))', 'z-index', '100002', 'display', 'flex', 'margin', '0', 'transform', 'none'].forEach((value, index, list) => {
+      if (index % 2 === 0) tRoot.style.setProperty(value, list[index + 1], 'important');
+    });
   }
   function toast(msg) {
     ensureToastStyle();
     let tRoot = byId('toaster') || byId('ag-toasts');
     if (!tRoot) { tRoot = document.createElement('div'); tRoot.id = 'toaster'; tRoot.className = 'toaster ag-toasts'; document.body.appendChild(tRoot); }
+    placeToaster(tRoot);
     const div = document.createElement('div'); div.className = 'toast'; div.textContent = msg; tRoot.appendChild(div);
     setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 220); }, 2200);
     return div;
@@ -4649,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.27-correction-inline';
+  window.__agiloEditorConfidenceVersion = '1.09.28-correction-toast';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4787,54 +4796,68 @@
     const unit = estimate <= 1 ? 'minute' : 'minutes';
     return 'Environ ' + estimate + ' ' + unit + '. En cours depuis ' + elapsedText + '.';
   }
-  function correctionEnsureStatus(slot) {
-    if (!slot) return null;
-    let hint = slot.querySelector('.agilo-correction-hint');
-    if (!hint) {
-      hint = document.createElement('p');
-      hint.className = 'agilo-correction-hint';
-      hint.textContent = 'Cela peut prendre quelques minutes.';
-      slot.appendChild(hint);
+  function correctionRemoveSideHint() {
+    document.querySelectorAll('.agilo-correction-hint, [data-agilo-correction-slot] [data-agilo-correction-progress]').forEach((node) => node.remove());
+  }
+  function correctionClearWaitCard() {
+    document.querySelector('[data-agilo-correction-wait-card]')?.remove();
+  }
+  function correctionWaitCard(sentence, pct) {
+    ensureToastStyle();
+    let tRoot = byId('toaster') || byId('ag-toasts');
+    if (!tRoot) {
+      tRoot = document.createElement('div');
+      tRoot.id = 'toaster';
+      tRoot.className = 'toaster ag-toasts';
+      document.body.appendChild(tRoot);
     }
-    let progress = slot.querySelector('[data-agilo-correction-progress]');
-    if (!progress) {
-      progress = document.createElement('span');
+    placeToaster(tRoot);
+    let card = tRoot.querySelector('[data-agilo-correction-wait-card]');
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'toast';
+      card.setAttribute('data-agilo-correction-wait-card', '');
+      const text = document.createElement('p');
+      text.className = 'agilo-correction-wait-text';
+      text.style.margin = '0';
+      const progress = document.createElement('span');
       progress.className = 'agilo-correction-progress';
-      progress.setAttribute('data-agilo-correction-progress', '');
       progress.setAttribute('role', 'progressbar');
       progress.setAttribute('aria-valuemin', '0');
       progress.setAttribute('aria-valuemax', '100');
-      progress.hidden = true;
       const bar = document.createElement('span');
       bar.className = 'agilo-correction-progress__bar';
       progress.appendChild(bar);
-      hint.insertAdjacentElement('afterend', progress);
+      card.append(text, progress);
+      tRoot.appendChild(card);
     }
-    return progress;
-  }
-  function correctionPaintWait(mode) {
-    correctionClearPaneWait();
-    const sentence = correctionWaitSentence(mode);
-    const hint = document.querySelector('.agilo-correction-hint');
-    if (hint) {
-      hint.hidden = false;
-      hint.textContent = sentence;
-    }
-    const progress = correctionEnsureStatus(document.querySelector('[data-agilo-correction-slot]'));
-    const bar = progress?.querySelector('.agilo-correction-progress__bar');
-    const running = mode === 'running' && !!correctionStarted;
-    const estimate = correctionEstimateMinutes(correctionAudioMinutes());
-    if (!progress || !bar || !running || !estimate) {
+    const text = card.querySelector('.agilo-correction-wait-text');
+    if (text) text.textContent = sentence;
+    const progress = card.querySelector('.agilo-correction-progress');
+    const bar = card.querySelector('.agilo-correction-progress__bar');
+    if (!progress || !bar || !pct) {
       if (progress) progress.hidden = true;
       return;
     }
-    const elapsedMs = Date.now() - correctionStarted;
-    const over = elapsedMs > estimate * 60000;
-    const pct = over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100)));
     progress.hidden = false;
     bar.style.width = pct + '%';
     progress.setAttribute('aria-valuenow', String(pct));
     progress.setAttribute('aria-valuetext', sentence);
+  }
+  function correctionPaintWait(mode) {
+    correctionClearPaneWait();
+    correctionRemoveSideHint();
+    const running = mode === 'running' && !!correctionStarted;
+    if (!running) {
+      correctionClearWaitCard();
+      return;
+    }
+    const sentence = correctionWaitSentence('running');
+    const estimate = correctionEstimateMinutes(correctionAudioMinutes());
+    const elapsedMs = Date.now() - correctionStarted;
+    const over = estimate > 0 && elapsedMs > estimate * 60000;
+    const pct = !estimate ? 0 : (over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100))));
+    correctionWaitCard(sentence, pct);
   }
   function correctionSetButton(mode) {
     const btn = document.querySelector('[data-agilo-correction]');
@@ -5263,7 +5286,6 @@
       btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-spin" aria-hidden="true"></span><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
       btn.addEventListener('click', () => correctionOnButtonClick());
       slot.append(btn);
-      correctionEnsureStatus(slot);
     }
     correctionMatchButton(slot.querySelector('[data-agilo-correction]'), save);
     const earlier = (save.compareDocumentPosition(anon) & Node.DOCUMENT_POSITION_FOLLOWING) ? save : anon;
@@ -5280,10 +5302,7 @@
       style.id = 'agilo-correction-style';
       style.textContent = [
         '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
-        '.agilo-correction-hint{margin:0;color:#525252;font-size:12px;line-height:1.3;max-width:16rem}',
-        '.agilo-correction-progress{display:block;width:7.5rem;height:4px;margin-top:4px;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
-        '.agilo-correction-progress[hidden]{display:none !important}',
-        '.agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
+        '.agilo-correction-hint,[data-agilo-correction-slot] [data-agilo-correction-progress]{display:none !important}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
         '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',
