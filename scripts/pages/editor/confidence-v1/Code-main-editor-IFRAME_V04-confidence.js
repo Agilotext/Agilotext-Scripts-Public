@@ -1040,13 +1040,23 @@
     return summaryEditor.innerHTML;
   };
 
+  function ensureToastStyle() {
+    if (document.getElementById('agilo-toast-style')) return;
+    const style = document.createElement('style');
+    style.id = 'agilo-toast-style';
+    style.textContent = '#toaster.ag-toasts,#ag-toasts.ag-toasts{position:fixed;right:16px;bottom:16px;z-index:100002;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:min(18rem,calc(100vw - 32px));margin:0;pointer-events:none}#toaster .toast,#ag-toasts .toast{pointer-events:auto;margin:0;background:#020202;color:#fff;border-radius:8px;padding:10px 14px;font:500 13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;box-shadow:0 8px 24px rgba(2,2,2,.18)}';
+    document.head.appendChild(style);
+  }
   function toast(msg) {
+    ensureToastStyle();
     let tRoot = byId('toaster') || byId('ag-toasts');
     if (!tRoot) { tRoot = document.createElement('div'); tRoot.id = 'toaster'; tRoot.className = 'toaster ag-toasts'; document.body.appendChild(tRoot); }
     const div = document.createElement('div'); div.className = 'toast'; div.textContent = msg; tRoot.appendChild(div);
     setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 220); }, 2200);
+    return div;
   }
   window.toast = window.toast || toast;
+  ensureToastStyle();
 
 
   const fmtHMS = (s) => {
@@ -4639,7 +4649,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.26-correction-duree';
+  window.__agiloEditorConfidenceVersion = '1.09.27-correction-inline';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4707,43 +4717,11 @@
       el.replaceWith(fallback);
     }, 1000);
   }
-  function correctionShowWait() {
-    const root = editors.transcript || pickTranscriptEl();
-    const host = byId('pane-transcript') || root?.parentElement || null;
-    if (!host || !root) return;
-    host.setAttribute('data-agilo-correction-wait', '');
-    if (host.querySelector(':scope > [data-agilo-correction-loader]')) return;
-    const loader = document.createElement('div');
-    loader.className = 'summary-loading-indicator';
-    loader.setAttribute('data-agilo-correction-loader', '');
-    const anim = document.createElement('div');
-    anim.id = 'loading-correction';
-    anim.className = 'lottie-check-statut';
-    const title = document.createElement('p');
-    title.className = 'loading-text';
-    title.textContent = 'Correction en cours…';
-    const subtitle = document.createElement('p');
-    subtitle.className = 'loading-subtitle';
-    subtitle.textContent = correctionWaitSentence('running');
-    const progress = document.createElement('span');
-    progress.className = 'agilo-correction-progress';
-    progress.setAttribute('data-agilo-correction-progress', '');
-    progress.setAttribute('role', 'progressbar');
-    progress.setAttribute('aria-valuemin', '0');
-    progress.setAttribute('aria-valuemax', '100');
-    const bar = document.createElement('span');
-    bar.className = 'agilo-correction-progress__bar';
-    progress.appendChild(bar);
-    loader.append(anim, title, subtitle, progress);
-    if (root.parentElement === host) host.insertBefore(loader, root);
-    else host.prepend(loader);
-    correctionStartLottie(anim);
-  }
-  function correctionHideWait() {
-    const host = correctionWaitHost();
-    if (!host) return;
-    host.removeAttribute('data-agilo-correction-wait');
-    host.querySelector('[data-agilo-correction-loader]')?.remove();
+  function correctionClearPaneWait() {
+    document.querySelectorAll('[data-agilo-correction-wait]').forEach((host) => {
+      host.removeAttribute('data-agilo-correction-wait');
+    });
+    document.querySelectorAll('[data-agilo-correction-loader]').forEach((node) => node.remove());
   }
   function correctionMatchButton(btn, save) {
     if (!btn || !save) return;
@@ -4809,24 +4787,51 @@
     const unit = estimate <= 1 ? 'minute' : 'minutes';
     return 'Environ ' + estimate + ' ' + unit + '. En cours depuis ' + elapsedText + '.';
   }
+  function correctionEnsureStatus(slot) {
+    if (!slot) return null;
+    let hint = slot.querySelector('.agilo-correction-hint');
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.className = 'agilo-correction-hint';
+      hint.textContent = 'Cela peut prendre quelques minutes.';
+      slot.appendChild(hint);
+    }
+    let progress = slot.querySelector('[data-agilo-correction-progress]');
+    if (!progress) {
+      progress = document.createElement('span');
+      progress.className = 'agilo-correction-progress';
+      progress.setAttribute('data-agilo-correction-progress', '');
+      progress.setAttribute('role', 'progressbar');
+      progress.setAttribute('aria-valuemin', '0');
+      progress.setAttribute('aria-valuemax', '100');
+      progress.hidden = true;
+      const bar = document.createElement('span');
+      bar.className = 'agilo-correction-progress__bar';
+      progress.appendChild(bar);
+      hint.insertAdjacentElement('afterend', progress);
+    }
+    return progress;
+  }
   function correctionPaintWait(mode) {
+    correctionClearPaneWait();
     const sentence = correctionWaitSentence(mode);
     const hint = document.querySelector('.agilo-correction-hint');
     if (hint) {
       hint.hidden = false;
       hint.textContent = sentence;
     }
-    const audioMinutes = correctionAudioMinutes();
-    const estimate = correctionEstimateMinutes(audioMinutes);
-    const progress = document.querySelector('[data-agilo-correction-loader] [data-agilo-correction-progress]');
+    const progress = correctionEnsureStatus(document.querySelector('[data-agilo-correction-slot]'));
     const bar = progress?.querySelector('.agilo-correction-progress__bar');
-    const subtitle = document.querySelector('[data-agilo-correction-loader] .loading-subtitle');
-    if (mode !== 'running' || !correctionStarted) return;
-    if (subtitle) subtitle.textContent = sentence;
-    if (!progress || !bar || !estimate) return;
+    const running = mode === 'running' && !!correctionStarted;
+    const estimate = correctionEstimateMinutes(correctionAudioMinutes());
+    if (!progress || !bar || !running || !estimate) {
+      if (progress) progress.hidden = true;
+      return;
+    }
     const elapsedMs = Date.now() - correctionStarted;
     const over = elapsedMs > estimate * 60000;
     const pct = over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100)));
+    progress.hidden = false;
     bar.style.width = pct + '%';
     progress.setAttribute('aria-valuenow', String(pct));
     progress.setAttribute('aria-valuetext', sentence);
@@ -4835,21 +4840,20 @@
     const btn = document.querySelector('[data-agilo-correction]');
     if (!btn) return;
     const label = btn.querySelector('.agilo-correction-label');
+    correctionClearPaneWait();
     if (mode === 'running') {
       btn.disabled = true;
       btn.setAttribute('aria-busy', 'true');
       btn.classList.add('is-running');
       if (label) label.textContent = 'Corriger';
-      correctionShowWait();
       correctionPaintWait('running');
-    } else {
-      btn.disabled = false;
-      btn.removeAttribute('aria-busy');
-      btn.classList.remove('is-running');
-      if (label) label.textContent = 'Corriger';
-      correctionHideWait();
-      correctionPaintWait('idle');
+      return;
     }
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.classList.remove('is-running');
+    if (label) label.textContent = 'Corriger';
+    correctionPaintWait('idle');
   }
   let correctionDurationRoot = null;
   let correctionDurationWatch = null;
@@ -5258,10 +5262,8 @@
       btn.setAttribute('aria-label', 'Corriger la transcription');
       btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-spin" aria-hidden="true"></span><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
       btn.addEventListener('click', () => correctionOnButtonClick());
-      const hint = document.createElement('p');
-      hint.className = 'agilo-correction-hint';
-      hint.textContent = 'Cela peut prendre quelques minutes.';
-      slot.append(btn, hint);
+      slot.append(btn);
+      correctionEnsureStatus(slot);
     }
     correctionMatchButton(slot.querySelector('[data-agilo-correction]'), save);
     const earlier = (save.compareDocumentPosition(anon) & Node.DOCUMENT_POSITION_FOLLOWING) ? save : anon;
@@ -5279,8 +5281,9 @@
       style.textContent = [
         '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
         '.agilo-correction-hint{margin:0;color:#525252;font-size:12px;line-height:1.3;max-width:16rem}',
-        '[data-agilo-correction-loader] .agilo-correction-progress{display:block;width:min(16rem,70%);height:4px;margin:0.85rem auto 0;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
-        '[data-agilo-correction-loader] .agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
+        '.agilo-correction-progress{display:block;width:7.5rem;height:4px;margin-top:4px;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
+        '.agilo-correction-progress[hidden]{display:none !important}',
+        '.agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
         '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',
@@ -5291,8 +5294,6 @@
         '.agilo-correction-ia{font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid rgba(255,255,255,.75);border-radius:4px;padding:0 4px;line-height:1.5;font-family:inherit}',
         '@keyframes agilo-correction-spin{to{transform:rotate(360deg)}}',
         '@media (prefers-reduced-motion: reduce){.agilo-correction-btn.is-running .agilo-correction-spin{animation:none}}',
-        '[data-agilo-correction-wait] > :not([data-agilo-correction-loader]){display:none !important}',
-        '#pane-transcript [data-agilo-correction-loader] #loading-correction{width:5.5rem;height:5.5rem;margin:0 auto 1.5rem;display:block}',
         '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}',
         '.agilo-correction-modal{--aq-radius:var(--0-5_radius, 0.5rem);--aq-fill:var(--color--blue, #174a96);position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:1rem}',
         '.agilo-correction-modal .aq-modal__backdrop{position:absolute;inset:0;z-index:0;background:linear-gradient(145deg, rgba(8, 22, 52, 0.72), rgba(7, 16, 35, 0.62));backdrop-filter:blur(5px)}',
