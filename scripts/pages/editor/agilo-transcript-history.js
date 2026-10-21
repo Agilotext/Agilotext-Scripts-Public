@@ -3,7 +3,7 @@
   'use strict';
 
   if (window.__agiloTranscriptHistoryVersion) return;
-  window.__agiloTranscriptHistoryVersion = '1.1.1-restore-lock';
+  window.__agiloTranscriptHistoryVersion = '1.2.1-restore-lock';
 
   const API = 'https://api.agilotext.com/api/v1';
   const ROOT_ID = 'agilo-tx-hist';
@@ -115,6 +115,7 @@
   let baselineJobId = '';
   let restoring = false;
   let listRequest = 0;
+  let lastSaveRefreshPromise = Promise.resolve([]);
 
   function announce(message) {
     if (typeof window.toast === 'function') window.toast(message);
@@ -283,7 +284,7 @@
         baselineJobId = String(detail.jobId);
       } catch (_) {}
     }
-    if (!restoring) fetchList().catch(() => {});
+    if (!restoring) lastSaveRefreshPromise = fetchList();
     render();
   }
 
@@ -458,6 +459,9 @@
   }
 
   window.__agiloTxHistoryHelpers = { parseApiDate, cleanSavedList, validateTranscript, canonicalSegments, sameTranscript, restoreTransaction, isTranscriptTab, isTranscriptVisible };
+  window.agiloWaitForTranscriptHistory = function(){
+    return lastSaveRefreshPromise;
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
   else init();
 })();
