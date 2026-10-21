@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.28-correction-toast';
+  window.__agiloEditorConfidenceVersion = '1.09.29-correction-center';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4730,6 +4730,9 @@
     document.querySelectorAll('[data-agilo-correction-wait]').forEach((host) => {
       host.removeAttribute('data-agilo-correction-wait');
     });
+    document.querySelectorAll('[data-agilo-correction-transcript-hidden]').forEach((node) => {
+      node.removeAttribute('data-agilo-correction-transcript-hidden');
+    });
     document.querySelectorAll('[data-agilo-correction-loader]').forEach((node) => node.remove());
   }
   function correctionMatchButton(btn, save) {
@@ -4783,100 +4786,135 @@
     const mins = Math.round(elapsed / 60000);
     return mins <= 1 ? '1 min' : mins + ' min';
   }
-  function correctionWaitSentence(mode) {
-    const audioMinutes = correctionAudioMinutes();
-    const estimate = correctionEstimateMinutes(audioMinutes);
-    if (mode !== 'running' || !correctionStarted) return correctionIdleHint(audioMinutes);
-    const elapsedText = correctionElapsedLabel(correctionStarted);
-    const elapsedMs = Date.now() - correctionStarted;
-    const over = estimate > 0 && elapsedMs > estimate * 60000;
-    if (!estimate) return 'En cours depuis ' + elapsedText + '.';
-    if (over) return 'Toujours en cours, un peu plus long que prévu. En cours depuis ' + elapsedText + '.';
-    if (audioMinutes < 20) return 'Environ 1 à 2 minutes. En cours depuis ' + elapsedText + '.';
-    const unit = estimate <= 1 ? 'minute' : 'minutes';
-    return 'Environ ' + estimate + ' ' + unit + '. En cours depuis ' + elapsedText + '.';
-  }
   function correctionRemoveSideHint() {
     document.querySelectorAll('.agilo-correction-hint, [data-agilo-correction-slot] [data-agilo-correction-progress]').forEach((node) => node.remove());
   }
   function correctionClearWaitCard() {
     document.querySelector('[data-agilo-correction-wait-card]')?.remove();
   }
-  function correctionWaitCard(sentence, pct) {
-    ensureToastStyle();
-    let tRoot = byId('toaster') || byId('ag-toasts');
-    if (!tRoot) {
-      tRoot = document.createElement('div');
-      tRoot.id = 'toaster';
-      tRoot.className = 'toaster ag-toasts';
-      document.body.appendChild(tRoot);
+  function correctionCenterParts() {
+    const audioMinutes = correctionAudioMinutes();
+    const estimate = correctionEstimateMinutes(audioMinutes);
+    const elapsedMs = correctionStarted ? Date.now() - correctionStarted : 0;
+    const over = estimate > 0 && elapsedMs > estimate * 60000;
+    const sentence = over ? 'Toujours en cours, un peu plus long que prévu.' : correctionIdleHint(audioMinutes);
+    const elapsed = correctionStarted ? 'En cours depuis ' + correctionElapsedLabel(correctionStarted) + '.' : '';
+    const pct = !estimate || !correctionStarted ? 0 : (over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100))));
+    return { sentence, elapsed, pct };
+  }
+  function correctionCenterHeight(root) {
+    const box = root.getBoundingClientRect();
+    const visible = Math.max(0, Math.min(box.bottom, window.innerHeight) - Math.max(box.top, 0));
+    const floor = Math.round(window.innerHeight * 0.5);
+    return Math.max(floor, Math.round(visible)) + 'px';
+  }
+  function correctionCreateCenter(root) {
+    const loader = document.createElement('div');
+    loader.className = 'summary-loading-indicator agilo-correction-center';
+    loader.setAttribute('data-agilo-correction-loader', '');
+    loader.setAttribute('role', 'status');
+    loader.style.minHeight = correctionCenterHeight(root);
+    const anim = document.createElement('div');
+    anim.id = 'loading-correction';
+    anim.className = 'lottie-check-statut';
+    const title = document.createElement('p');
+    title.className = 'loading-text';
+    title.textContent = 'Correction en cours';
+    const sentence = document.createElement('p');
+    sentence.className = 'loading-subtitle';
+    sentence.setAttribute('data-agilo-correction-sentence', '');
+    sentence.setAttribute('aria-live', 'polite');
+    const elapsed = document.createElement('p');
+    elapsed.className = 'loading-subtitle agilo-correction-elapsed';
+    elapsed.setAttribute('data-agilo-correction-elapsed', '');
+    elapsed.setAttribute('aria-hidden', 'true');
+    const progress = document.createElement('span');
+    progress.className = 'agilo-correction-progress';
+    progress.setAttribute('data-agilo-correction-progress', '');
+    progress.setAttribute('aria-hidden', 'true');
+    const bar = document.createElement('span');
+    bar.className = 'agilo-correction-progress__bar';
+    progress.appendChild(bar);
+    loader.append(anim, title, sentence, elapsed, progress);
+    root.insertAdjacentElement('beforebegin', loader);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      const fallback = document.createElement('div');
+      fallback.className = 'lottie-fallback';
+      anim.replaceWith(fallback);
+      return loader;
     }
-    placeToaster(tRoot);
-    let card = tRoot.querySelector('[data-agilo-correction-wait-card]');
-    if (!card) {
-      card = document.createElement('div');
-      card.className = 'toast';
-      card.setAttribute('data-agilo-correction-wait-card', '');
-      const text = document.createElement('p');
-      text.className = 'agilo-correction-wait-text';
-      text.style.margin = '0';
-      const progress = document.createElement('span');
-      progress.className = 'agilo-correction-progress';
-      progress.setAttribute('role', 'progressbar');
-      progress.setAttribute('aria-valuemin', '0');
-      progress.setAttribute('aria-valuemax', '100');
-      const bar = document.createElement('span');
-      bar.className = 'agilo-correction-progress__bar';
-      progress.appendChild(bar);
-      card.append(text, progress);
-      tRoot.appendChild(card);
-    }
-    const text = card.querySelector('.agilo-correction-wait-text');
-    if (text) text.textContent = sentence;
-    const progress = card.querySelector('.agilo-correction-progress');
-    const bar = card.querySelector('.agilo-correction-progress__bar');
-    if (!progress || !bar || !pct) {
-      if (progress) progress.hidden = true;
+    initLottieAnimation(anim);
+    setTimeout(() => {
+      if (!anim.isConnected) return;
+      if (anim.querySelector('svg, canvas') || anim._lottie) return;
+      const fallback = document.createElement('div');
+      fallback.className = 'lottie-fallback';
+      anim.style.display = 'none';
+      anim.insertAdjacentElement('beforebegin', fallback);
+    }, 1000);
+    return loader;
+  }
+  function correctionShowCenter() {
+    correctionClearWaitCard();
+    const root = editors.transcript || pickTranscriptEl();
+    if (!root || !root.parentElement) return;
+    let loader = document.querySelector('[data-agilo-correction-loader]');
+    if (!loader || !loader.isConnected) loader = correctionCreateCenter(root);
+    else if (loader.nextElementSibling !== root) root.insertAdjacentElement('beforebegin', loader);
+    root.setAttribute('data-agilo-correction-transcript-hidden', '');
+    const parts = correctionCenterParts();
+    const sentence = loader.querySelector('[data-agilo-correction-sentence]');
+    const elapsed = loader.querySelector('[data-agilo-correction-elapsed]');
+    if (sentence && sentence.textContent !== parts.sentence) sentence.textContent = parts.sentence;
+    if (elapsed && elapsed.textContent !== parts.elapsed) elapsed.textContent = parts.elapsed;
+    const progress = loader.querySelector('[data-agilo-correction-progress]');
+    const bar = loader.querySelector('.agilo-correction-progress__bar');
+    if (!progress || !bar) return;
+    if (!parts.pct) {
+      progress.hidden = true;
       return;
     }
     progress.hidden = false;
-    bar.style.width = pct + '%';
-    progress.setAttribute('aria-valuenow', String(pct));
-    progress.setAttribute('aria-valuetext', sentence);
+    bar.style.width = parts.pct + '%';
+  }
+  function correctionBlockReview(event) {
+    if (correctionStatus !== 'running') return;
+    const nav = event.target?.closest?.('#ag-confidence-prev, #ag-confidence-next');
+    const keys = event.type === 'keydown' && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft');
+    if (!nav && !keys) return;
+    event.preventDefault();
+    event.stopPropagation();
   }
   function correctionPaintWait(mode) {
-    correctionClearPaneWait();
     correctionRemoveSideHint();
     const running = mode === 'running' && !!correctionStarted;
     if (!running) {
+      correctionClearPaneWait();
       correctionClearWaitCard();
       return;
     }
-    const sentence = correctionWaitSentence('running');
-    const estimate = correctionEstimateMinutes(correctionAudioMinutes());
-    const elapsedMs = Date.now() - correctionStarted;
-    const over = estimate > 0 && elapsedMs > estimate * 60000;
-    const pct = !estimate ? 0 : (over ? 90 : Math.max(4, Math.min(90, Math.round((elapsedMs / (estimate * 60000)) * 100))));
-    correctionWaitCard(sentence, pct);
+    correctionShowCenter();
   }
   function correctionSetButton(mode) {
     const btn = document.querySelector('[data-agilo-correction]');
-    if (!btn) return;
-    const label = btn.querySelector('.agilo-correction-label');
-    correctionClearPaneWait();
-    if (mode === 'running') {
+    const label = btn?.querySelector('.agilo-correction-label');
+    if (mode !== 'running') {
+      correctionPaintWait('idle');
+      if (!btn) return;
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.classList.remove('is-running');
+      if (label) label.textContent = 'Corriger';
+      return;
+    }
+    if (btn) {
       btn.disabled = true;
       btn.setAttribute('aria-busy', 'true');
       btn.classList.add('is-running');
       if (label) label.textContent = 'Corriger';
-      correctionPaintWait('running');
-      return;
     }
-    btn.disabled = false;
-    btn.removeAttribute('aria-busy');
-    btn.classList.remove('is-running');
-    if (label) label.textContent = 'Corriger';
-    correctionPaintWait('idle');
+    correctionPaintWait('running');
   }
   let correctionDurationRoot = null;
   let correctionDurationWatch = null;
@@ -5303,6 +5341,12 @@
       style.textContent = [
         '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
         '.agilo-correction-hint,[data-agilo-correction-slot] [data-agilo-correction-progress]{display:none !important}',
+        '[data-agilo-correction-transcript-hidden]{display:none !important}',
+        '.agilo-correction-center{width:100%;box-sizing:border-box}',
+        '.agilo-correction-center #loading-correction{width:88px;height:88px;margin:0 auto 24px;display:block}',
+        '.agilo-correction-center .agilo-correction-progress{display:block;width:min(16rem,80%);height:4px;margin:16px auto 0;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
+        '.agilo-correction-center .agilo-correction-progress[hidden]{display:none !important}',
+        '.agilo-correction-center .agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
         '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',
@@ -5342,6 +5386,8 @@
     document.addEventListener('click', (event) => {
       if (event.target.closest('#tab-transcript, #tab-summary, #tab-chat')) correctionSyncVisibility();
     });
+    document.addEventListener('click', correctionBlockReview, true);
+    document.addEventListener('keydown', correctionBlockReview, true);
     const watch = new MutationObserver(() => correctionSyncVisibility());
     ['tab-transcript', 'tab-summary', 'tab-chat', 'pane-transcript'].forEach((id) => {
       const node = byId(id);
