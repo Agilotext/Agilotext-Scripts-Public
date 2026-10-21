@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.29-correction-center';
+  window.__agiloEditorConfidenceVersion = '1.09.30-correction-dock';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4730,8 +4730,14 @@
     document.querySelectorAll('[data-agilo-correction-wait]').forEach((host) => {
       host.removeAttribute('data-agilo-correction-wait');
     });
-    document.querySelectorAll('[data-agilo-correction-transcript-hidden]').forEach((node) => {
+    document.querySelectorAll('[data-agilo-correction-transcript-hidden], [data-agilo-correction-transcript-wait]').forEach((node) => {
       node.removeAttribute('data-agilo-correction-transcript-hidden');
+      node.removeAttribute('data-agilo-correction-transcript-wait');
+      const saved = node.getAttribute('data-agilo-correction-editable-saved');
+      if (saved == null) return;
+      if (saved === '') node.removeAttribute('contenteditable');
+      else node.setAttribute('contenteditable', saved);
+      node.removeAttribute('data-agilo-correction-editable-saved');
     });
     document.querySelectorAll('[data-agilo-correction-loader]').forEach((node) => node.remove());
   }
@@ -4806,7 +4812,14 @@
     const box = root.getBoundingClientRect();
     const visible = Math.max(0, Math.min(box.bottom, window.innerHeight) - Math.max(box.top, 0));
     const floor = Math.round(window.innerHeight * 0.5);
-    return Math.max(floor, Math.round(visible)) + 'px';
+    const cap = Math.round(window.innerHeight);
+    return Math.min(cap, Math.max(floor, Math.round(visible) || floor)) + 'px';
+  }
+  function correctionLockEditor(root) {
+    if (!root || root.hasAttribute('data-agilo-correction-editable-saved')) return;
+    const value = root.getAttribute('contenteditable');
+    root.setAttribute('data-agilo-correction-editable-saved', value == null ? '' : value);
+    if (value === 'true') root.setAttribute('contenteditable', 'false');
   }
   function correctionCreateCenter(root) {
     const loader = document.createElement('div');
@@ -4836,7 +4849,7 @@
     bar.className = 'agilo-correction-progress__bar';
     progress.appendChild(bar);
     loader.append(anim, title, sentence, elapsed, progress);
-    root.insertAdjacentElement('beforebegin', loader);
+    root.prepend(loader);
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) {
       const fallback = document.createElement('div');
@@ -4861,8 +4874,10 @@
     if (!root || !root.parentElement) return;
     let loader = document.querySelector('[data-agilo-correction-loader]');
     if (!loader || !loader.isConnected) loader = correctionCreateCenter(root);
-    else if (loader.nextElementSibling !== root) root.insertAdjacentElement('beforebegin', loader);
-    root.setAttribute('data-agilo-correction-transcript-hidden', '');
+    else if (loader.parentElement !== root) root.prepend(loader);
+    correctionLockEditor(root);
+    root.removeAttribute('data-agilo-correction-transcript-hidden');
+    root.setAttribute('data-agilo-correction-transcript-wait', '');
     const parts = correctionCenterParts();
     const sentence = loader.querySelector('[data-agilo-correction-sentence]');
     const elapsed = loader.querySelector('[data-agilo-correction-elapsed]');
@@ -5341,7 +5356,7 @@
       style.textContent = [
         '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
         '.agilo-correction-hint,[data-agilo-correction-slot] [data-agilo-correction-progress]{display:none !important}',
-        '[data-agilo-correction-transcript-hidden]{display:none !important}',
+        '[data-agilo-correction-transcript-wait] > :not([data-agilo-correction-loader]){display:none !important}',
         '.agilo-correction-center{width:100%;box-sizing:border-box}',
         '.agilo-correction-center #loading-correction{width:88px;height:88px;margin:0 auto 24px;display:block}',
         '.agilo-correction-center .agilo-correction-progress{display:block;width:min(16rem,80%);height:4px;margin:16px auto 0;border-radius:999px;background:rgba(23,74,150,.16);overflow:hidden}',
