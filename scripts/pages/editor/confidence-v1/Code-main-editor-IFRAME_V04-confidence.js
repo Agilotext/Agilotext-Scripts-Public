@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.31-correction-autosave';
+  window.__agiloEditorConfidenceVersion = '1.09.32-correction-button';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4756,7 +4756,6 @@
     btn.style.letterSpacing = cs.letterSpacing;
     const box = getComputedStyle(save);
     btn.style.borderRadius = box.borderRadius;
-    btn.style.padding = box.padding;
   }
   function correctionAudioMinutes() {
     const root = editors.transcript || pickTranscriptEl();
@@ -5350,7 +5349,12 @@
     correctionFocusClose(panel);
   }
   function correctionOnButtonClick() {
-    if (document.querySelector('[data-agilo-correction-dialog]')) return;
+    const open = document.querySelector('[data-agilo-correction-dialog]');
+    if (open) {
+      const close = open.querySelector('.aq-modal__close');
+      if (close) close.focus();
+      return;
+    }
     if (correctionStatus === 'running') return;
     if (document.querySelector('.agilo-anon-banner.is-visible')) {
       toast('Terminez ou annulez l’anonymisation d’abord.');
@@ -5407,7 +5411,7 @@
       const style = document.createElement('style');
       style.id = 'agilo-correction-style';
       style.textContent = [
-        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
+        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle;flex:0 0 auto}',
         '.agilo-correction-hint,[data-agilo-correction-slot] [data-agilo-correction-progress]{display:none !important}',
         '[data-agilo-correction-transcript-wait] > :not([data-agilo-correction-loader]){display:none !important}',
         '.agilo-correction-center{width:100%;box-sizing:border-box}',
@@ -5416,7 +5420,7 @@
         '.agilo-correction-center .agilo-correction-progress[hidden]{display:none !important}',
         '.agilo-correction-center .agilo-correction-progress__bar{display:block;height:100%;width:0;border-radius:999px;background:#174a96}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
-        '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
+        '.agilo-correction-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:11rem;min-height:2rem;max-width:100%;padding:.5rem 1rem;font-weight:600;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',
         '.agilo-correction-ico{width:18px;height:18px;display:block;flex:0 0 auto}',
         '.agilo-correction-spin{display:none;width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;box-sizing:border-box}',
