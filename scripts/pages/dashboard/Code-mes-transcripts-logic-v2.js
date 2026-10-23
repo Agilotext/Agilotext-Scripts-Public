@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.11-investigation-pv
+   AGILOTEXT — Mes transcripts logic v2.2.12-summary-native
+   v2.2.12-summary-native — compte rendu déjà bon : le navigateur charge le lien, nom du serveur.
    v2.2.11-investigation-pv — sanitize clone PV (cursor pointer idle, pas de verifying copié).
    v2.2.10-investigation-pv — clone DOCX Webflow sans classe summary_* ; z-index menu 100.
    v2.2.9-investigation-pv — lien PV d’enquête (Word) sidecar formatInvestigationPv (705–720).
@@ -28,7 +29,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.11-investigation-pv';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.12-summary-native';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -397,19 +398,6 @@
     });
   }
 
-  function triggerBlobDownload(blob, filename) {
-    const href = URL.createObjectURL(blob);
-    const tempLink = document.createElement('a');
-    tempLink.href = href;
-    tempLink.download = filename || 'summary';
-    tempLink.rel = 'noopener noreferrer';
-    tempLink.style.display = 'none';
-    document.body.appendChild(tempLink);
-    tempLink.click();
-    tempLink.remove();
-    setTimeout(() => URL.revokeObjectURL(href), 2000);
-  }
-
   function findJobForSummaryAnchor(anchorEl) {
     const row = anchorEl && anchorEl.closest ? anchorEl.closest('.wrapper-content_item-row') : null;
     const jobId = row && row.getAttribute('data-job-id');
@@ -436,7 +424,6 @@
       return;
     }
     if (job) rememberSummaryProbe(job, 'ok');
-    triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
   }
 
   function isInvestigationPvAnchor(el) {
@@ -562,11 +549,28 @@
     return href.includes('receiveSummary');
   }
 
+  function agiloSummaryClickAction(state) {
+    if (state === 'ok') return 'native';
+    if (state === 'missing') return 'block';
+    return 'probe';
+  }
+
+  function summaryAnchorState(anchorEl) {
+    const { job } = findJobForSummaryAnchor(anchorEl);
+    if (job && job.__agiloSummaryUnavailable) return 'missing';
+    return summaryProbeByJobId.get(summaryJobKey(job)) || '';
+  }
+
+  function keepSummaryTarget(anchorEl) {
+    if (!anchorEl || typeof anchorEl.getAttribute !== 'function') return;
+    if (!anchorEl.getAttribute('target')) anchorEl.setAttribute('target', '_blank');
+  }
+
   function neutralizeSummaryNavigation(anchorEl) {
     if (!anchorEl) return;
-    anchorEl.removeAttribute('target');
     anchorEl.removeAttribute('data-w-id');
-    anchorEl.setAttribute('rel', 'nofollow');
+    keepSummaryTarget(anchorEl);
+    anchorEl.setAttribute('rel', 'noopener noreferrer');
   }
 
   function bindSummaryDownloadGuard(anchorEl) {
@@ -582,9 +586,19 @@
         event.target && event.target.closest ? event.target.closest('a[href*="receiveSummary"]') : null;
       if (!anchorEl || !isSummaryDownloadAnchor(anchorEl)) return;
       if (event.type === 'click' && event.button !== 0) return;
+      const action = agiloSummaryClickAction(summaryAnchorState(anchorEl));
+      if (action === 'native') {
+        keepSummaryTarget(anchorEl);
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      if (action === 'block') {
+        const { row, job } = findJobForSummaryAnchor(anchorEl);
+        if (row && job) setSummaryCellState(row, job);
+        return;
+      }
       handleSummaryDownloadClick(anchorEl);
     };
     document.addEventListener('click', intercept, true);
@@ -592,6 +606,11 @@
       const anchorEl =
         event.target && event.target.closest ? event.target.closest('a[href*="receiveSummary"]') : null;
       if (!anchorEl || !isSummaryDownloadAnchor(anchorEl)) return;
+      const action = agiloSummaryClickAction(summaryAnchorState(anchorEl));
+      if (action === 'native') {
+        keepSummaryTarget(anchorEl);
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
