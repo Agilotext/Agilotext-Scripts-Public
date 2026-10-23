@@ -46,21 +46,29 @@ test('audio garde sa vérification', () => {
   assert.equal(agiloOrchestratorDownloadAction('audio', 'free', 'pdf', audio, false), 'audio');
 });
 
-test('hôte Index et lien à ignorer : l orchestrateur ne touche pas au clic', () => {
-  assert.equal(agiloOrchestratorDownloadAction('summary', 'ent', 'pdf', indexHost, false), 'ignore');
+test('hôte Index part dans le clic, lien à ignorer non', () => {
+  assert.equal(agiloOrchestratorDownloadAction('summary', 'ent', 'pdf', indexHost, false, 'ok'), 'native');
   assert.equal(agiloOrchestratorDownloadAction('text', 'pro', 'pdf', api, true), 'ignore');
   assert.equal(agiloOrchestratorDownloadAction('text', 'pro', 'pdf', '', false), 'ignore');
   assert.equal(agiloOrchestratorDownloadAction('', 'pro', 'pdf', api, false), 'ignore');
+});
+
+test('compte rendu encore inconnu ou absent : pas de fichier', () => {
+  assert.equal(agiloOrchestratorDownloadAction('summary', 'ent', 'pdf', summary, false, 'probe'), 'ignore');
+  assert.equal(agiloOrchestratorDownloadAction('summary', 'ent', 'pdf', summary, false, 'missing'), 'ignore');
+  assert.equal(agiloOrchestratorDownloadAction('summary', 'ent', 'pdf', summary, false, ''), 'native');
 });
 
 test('le clic transcription et compte rendu n attend pas et n ouvre pas de fenêtre', () => {
   const start = source.indexOf("if (action === 'native')");
   const end = source.indexOf("if (action === 'block')");
   const native = source.slice(start, end);
-  assert.equal(native.includes('preventDefault'), false);
+  assert.equal(native.includes('preventDefault'), true);
+  assert.equal(native.includes('startGestureDownload'), true);
   assert.equal(native.includes('window.open'), false);
   assert.equal(native.includes('await'), false);
   assert.equal(source.includes('window.open'), true);
+  assert.equal(source.includes("frame.src = url"), true);
 });
 
 test('les liens transcription et compte rendu ne gardent pas un nom forcé', () => {
@@ -69,5 +77,6 @@ test('les liens transcription et compte rendu ne gardent pas un nom forcé', () 
   assert.notEqual(textAt, -1);
   assert.notEqual(summaryAt, -1);
   assert.equal(logic.slice(textAt, textAt + 400).includes("removeAttribute('download')"), true);
-  assert.equal(logic.slice(summaryAt, summaryAt + 500).includes("removeAttribute('download')"), true);
+  assert.equal(logic.slice(summaryAt, summaryAt + 700).includes("removeAttribute('download')"), true);
+  assert.equal(logic.slice(summaryAt, summaryAt + 700).includes("data-agilo-summary"), true);
 });

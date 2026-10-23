@@ -294,16 +294,31 @@
     }
   }
 
-  function agiloOrchestratorDownloadAction(kind, edition, format, href, skip) {
+  function agiloOrchestratorDownloadAction(kind, edition, format, href, skip, summaryState) {
     if (skip) return 'ignore';
     const url = String(href || '');
-    if (!url || url.indexOf('api.agilotext.com') === -1) return 'ignore';
+    const onApi = url.indexOf('api.agilotext.com') !== -1
+      || url.indexOf('index-education.agilotext.com') !== -1;
+    if (!url || !onApi) return 'ignore';
     if (kind !== 'text' && kind !== 'summary' && kind !== 'audio') return 'ignore';
     if (kind === 'audio') return 'audio';
     const ed = String(edition || '').trim().toLowerCase();
     const fmt = String(format || '').trim().toLowerCase();
     if ((ed === 'free' || ed === 'gratuit') && (fmt === 'doc' || fmt === 'pdf')) return 'block';
+    if (kind === 'summary' && (summaryState === 'missing' || summaryState === 'probe')) return 'ignore';
     return 'native';
+  }
+
+  function startGestureDownload(url) {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    frame.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;border:0;visibility:hidden';
+    frame.src = url;
+    (document.body || document.documentElement).appendChild(frame);
+    setTimeout(() => {
+      try { frame.remove(); } catch (_) {}
+    }, 120000);
   }
 
   function downloadKindFromHref(href) {
@@ -331,18 +346,24 @@
       edition,
       format,
       href,
-      skip
+      skip,
+      a.getAttribute('data-agilo-summary') || ''
     );
     if (action === 'ignore') return;
     if (action === 'native') {
+      e.preventDefault();
+      e.stopPropagation();
+      let next = a.href || href;
       const tok = window.globalToken || orch.credentials.token || '';
       if (tok) {
         try {
-          const u = new URL(href, location.href);
+          const u = new URL(next, location.href);
           u.searchParams.set('token', tok);
-          a.href = u.toString();
+          next = u.toString();
+          a.href = next;
         } catch (_) {}
       }
+      startGestureDownload(next);
       return;
     }
     if (action === 'block') {

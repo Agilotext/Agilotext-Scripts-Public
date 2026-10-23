@@ -1,6 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.13-native-click
-   v2.2.13-native-click — transcription et compte rendu : pas de nom forcé, le clic du navigateur part.
+   AGILOTEXT — Mes transcripts logic v2.2.14-gesture-download
+   v2.2.14-gesture-download — compte rendu : état sur le lien, le fichier part dans le clic.
    v2.2.12-summary-native — compte rendu déjà bon : le navigateur charge le lien, nom du serveur.
    v2.2.11-investigation-pv — sanitize clone PV (cursor pointer idle, pas de verifying copié).
    v2.2.10-investigation-pv — clone DOCX Webflow sans classe summary_* ; z-index menu 100.
@@ -30,7 +30,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.13-native-click';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.14-gesture-download';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -238,6 +238,11 @@
     const id = summaryJobKey(jobOrId);
     if (!id || (state !== 'ok' && state !== 'missing')) return;
     summaryProbeByJobId.set(id, state);
+    document.querySelectorAll('a[href*="receiveSummary"]').forEach((anchor) => {
+      const href = String(anchor.getAttribute('href') || '');
+      if (href.indexOf(`jobId=${id}`) === -1 && href.indexOf(`jobId=${encodeURIComponent(id)}`) === -1) return;
+      anchor.setAttribute('data-agilo-summary', state);
+    });
   }
 
   function applySummaryProbeToJob(job) {
@@ -1866,6 +1871,7 @@
         )}`;
         aS.target = '_blank';
         aS.removeAttribute('download');
+        aS.setAttribute('data-agilo-summary', summaryProbeByJobId.get(summaryJobKey(job)) || 'probe');
         aS.style.removeProperty('display');
         bindSummaryDownloadGuard(aS);
         hasAnySummaryLink = true;
