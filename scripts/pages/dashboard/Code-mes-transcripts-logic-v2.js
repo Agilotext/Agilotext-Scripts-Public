@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.12-summary-native
+   AGILOTEXT — Mes transcripts logic v2.2.13-native-click
+   v2.2.13-native-click — transcription et compte rendu : pas de nom forcé, le clic du navigateur part.
    v2.2.12-summary-native — compte rendu déjà bon : le navigateur charge le lien, nom du serveur.
    v2.2.11-investigation-pv — sanitize clone PV (cursor pointer idle, pas de verifying copié).
    v2.2.10-investigation-pv — clone DOCX Webflow sans classe summary_* ; z-index menu 100.
@@ -29,7 +30,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.12-summary-native';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.13-native-click';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -1836,6 +1837,7 @@
           userEmail
         )}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
         aT.target = '_blank';
+        aT.removeAttribute('download');
         aT.style.removeProperty('display');
         hasAnyTranscriptLink = true;
       } else if (aT) {
@@ -1863,6 +1865,7 @@
           edition
         )}`;
         aS.target = '_blank';
+        aS.removeAttribute('download');
         aS.style.removeProperty('display');
         bindSummaryDownloadGuard(aS);
         hasAnySummaryLink = true;

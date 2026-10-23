@@ -194,10 +194,9 @@
   document.addEventListener('DOMContentLoaded', loadCredsHandler);
   cleanupFunctions.push(() => document.removeEventListener('DOMContentLoaded', loadCredsHandler));
 
-  // Avant ouverture des téléchargements API : le href contient un token figé (souvent périmé si onglet ouvert longtemps).
-  // On force toujours un getToken frais puis on reconstruit l’URL (évite Invalid Token sur receiveText / receiveSummary).
+  // Transcription et compte rendu : le clic du navigateur part tout de suite, avec le jeton déjà en mémoire.
+  // L’audio attend encore une vérification, puis s’ouvre.
   const AGILO_API_V1 = 'https://api.agilotext.com/api/v1';
-  const FREE_RESTRICTED_FORMATS = new Set(['doc', 'pdf']);
   const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
     || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
   const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
@@ -295,13 +294,67 @@
     }
   }
 
+  function agiloOrchestratorDownloadAction(kind, edition, format, href, skip) {
+    if (skip) return 'ignore';
+    const url = String(href || '');
+    if (!url || url.indexOf('api.agilotext.com') === -1) return 'ignore';
+    if (kind !== 'text' && kind !== 'summary' && kind !== 'audio') return 'ignore';
+    if (kind === 'audio') return 'audio';
+    const ed = String(edition || '').trim().toLowerCase();
+    const fmt = String(format || '').trim().toLowerCase();
+    if ((ed === 'free' || ed === 'gratuit') && (fmt === 'doc' || fmt === 'pdf')) return 'block';
+    return 'native';
+  }
+
+  function downloadKindFromHref(href) {
+    const url = String(href || '');
+    if (url.indexOf('/api/v1/receiveSummary') !== -1) return 'summary';
+    if (url.indexOf('/api/v1/receiveText') !== -1) return 'text';
+    if (url.indexOf('/api/v1/receiveAudio') !== -1) return 'audio';
+    return '';
+  }
+
   const downloadClickHandler = (e) => {
     const a = e.target.closest?.(
       'a[href*="/api/v1/receiveText"], a[href*="/api/v1/receiveSummary"], a[href*="/api/v1/receiveAudio"]'
     );
-    if (!a || a.getAttribute('data-agilo-skip-token-refresh') === 'true') return;
-    const href = a.getAttribute('href');
-    if (!href || !href.includes('api.agilotext.com')) return;
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    const skip = a.getAttribute('data-agilo-skip-token-refresh') === 'true';
+    let format = '';
+    try {
+      format = String(new URL(href, location.href).searchParams.get('format') || '');
+    } catch (_) {}
+    const edition = normEdition(orch.credentials.edition || getEdition());
+    const action = agiloOrchestratorDownloadAction(
+      downloadKindFromHref(href),
+      edition,
+      format,
+      href,
+      skip
+    );
+    if (action === 'ignore') return;
+    if (action === 'native') {
+      const tok = window.globalToken || orch.credentials.token || '';
+      if (tok) {
+        try {
+          const u = new URL(href, location.href);
+          u.searchParams.set('token', tok);
+          a.href = u.toString();
+        } catch (_) {}
+      }
+      return;
+    }
+    if (action === 'block') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.AgiloGate?.showUpgrade) {
+        window.AgiloGate.showUpgrade('pro', 'Formats DOC/PDF');
+      } else {
+        window.alert('Format réservé aux offres Pro et Business.');
+      }
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
@@ -312,23 +365,8 @@
       || document.querySelector('[name="memberEmail"]')?.value
       || ''
     ).trim();
-    const edition = orch.credentials.edition || getEdition();
+    const editionForAudio = orch.credentials.edition || getEdition();
     const targetWin = a.getAttribute('target') || '_blank';
-
-    try {
-      const initialUrl = new URL(href, location.href);
-      const fmt = String(initialUrl.searchParams.get('format') || '').toLowerCase();
-      if (normEdition(edition) === 'free' && FREE_RESTRICTED_FORMATS.has(fmt)) {
-        if (window.AgiloGate?.showUpgrade) {
-          window.AgiloGate.showUpgrade('pro', 'Formats DOC/PDF');
-        } else {
-          window.alert('Format réservé aux offres Pro et Business.');
-        }
-        return;
-      }
-    } catch (_) {
-      // no-op: fallback to legacy flow below
-    }
 
     const openWithHref = (url) => {
       if (targetWin === '_blank') window.open(url, '_blank', 'noopener,noreferrer');
@@ -338,12 +376,12 @@
     const fallbackFetchToken = async () => {
       if (!email) return;
       try {
-        const url = `${AGILO_API_V1}/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
+        const url = `${AGILO_API_V1}/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(editionForAudio)}`;
         const r = await fetch(url, { cache: 'no-store', credentials: 'omit' });
         const data = await r.json().catch(() => ({}));
         if (r.ok && data?.status === 'OK' && data?.token) {
           window.globalToken = data.token;
-          orch.setCredentials({ token: data.token, email, edition });
+          orch.setCredentials({ token: data.token, email, edition: editionForAudio });
         }
       } catch (err) {
         if (window.AGILO_DEBUG) console.error('[Orch] getToken fallback:', err);
@@ -353,7 +391,7 @@
     (async () => {
       try {
         if (email && typeof window.getToken === 'function') {
-          await window.getToken(email, edition, true);
+          await window.getToken(email, editionForAudio, true);
         } else if (email) {
           await fallbackFetchToken();
         }
