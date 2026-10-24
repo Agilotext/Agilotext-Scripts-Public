@@ -2150,7 +2150,7 @@
       body.contentEditable = 'true';
       body.spellcheck = false;
       body.textContent = s.text || '';
-      body.dataset.agiloLoaded = s.text || '';
+      body.dataset.agiloLoaded = correctionVisibleText(body);
       art.appendChild(body);
 
       frag.appendChild(art);
@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.32-correction-button';
+  window.__agiloEditorConfidenceVersion = '1.09.33-correction-after-save';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -4678,6 +4678,8 @@
   let correctionErrorJob = '';
   let correctionErrorReason = '';
   let correctionDialogReturn = null;
+  let correctionLaunchText = '';
+  let correctionBaselineBound = false;
   const CORRECTION_SKIP_KEY = 'agilo-correction-skip-intro';
   const CORRECTION_FORMATS = [
     ['TXT', 'format=txt'],
@@ -4695,11 +4697,73 @@
     if (value == null || value === '') return raw == null || raw === '';
     return Number(raw) === Number(value);
   }
-  function correctionDirty() {
+  function correctionVisibleText(box) {
+    if (!box) return '';
+    if (typeof window.visibleTextFromBox === 'function') return window.visibleTextFromBox(box);
+    return box.textContent || '';
+  }
+  function correctionTextBoxes() {
     const root = editors.transcript || pickTranscriptEl();
-    if (!root) return false;
-    return Array.from(root.querySelectorAll(':scope > .ag-seg .ag-seg__text')).some((box) => {
-      return (box.textContent || '') !== (box.dataset.agiloLoaded || '');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll(':scope > .ag-seg')).map((art) => art.querySelector('.ag-seg__text')).filter(Boolean);
+  }
+  function correctionDirty() {
+    return correctionTextBoxes().some((box) => correctionVisibleText(box) !== (box.dataset.agiloLoaded || ''));
+  }
+  function correctionScreenStamp() {
+    return correctionTextBoxes().map((box) => correctionVisibleText(box)).join('\u0000');
+  }
+  function correctionBaselinePlan(jobId, source, eventJobId, rows, savedSegments) {
+    if (String(eventJobId || '') !== String(jobId || '')) return null;
+    if (source === 'history-restore') return null;
+    if (source !== 'manual' && source !== 'requested' && source !== 'history-presave') return null;
+    const savedById = new Map();
+    if (Array.isArray(savedSegments)) {
+      for (let i = 0; i < savedSegments.length; i++) {
+        const seg = savedSegments[i];
+        if (!seg || seg.id == null) continue;
+        savedById.set(String(seg.id), String(seg.text == null ? '' : seg.text));
+      }
+    }
+    const next = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] || {};
+      const id = String(row.id == null ? '' : row.id);
+      if (!savedById.has(id) || String(row.visible == null ? '' : row.visible) !== savedById.get(id)) {
+        next.push(row);
+        continue;
+      }
+      const saved = savedById.get(id);
+      next.push({ id: id, visible: row.visible, loaded: saved, modelText: saved });
+    }
+    return next;
+  }
+  function correctionAdoptSaved(detail) {
+    if (!detail) return;
+    const root = editors.transcript || pickTranscriptEl();
+    if (!root) return;
+    const arts = Array.from(root.querySelectorAll(':scope > .ag-seg'));
+    const model = Array.isArray(window._segments) ? window._segments : null;
+    const rows = arts.map((art, index) => {
+      const box = art.querySelector('.ag-seg__text');
+      return {
+        id: art.dataset.id || '',
+        visible: box ? correctionVisibleText(box) : '',
+        loaded: box ? (box.dataset.agiloLoaded || '') : '',
+        modelText: model && model[index] ? model[index].text : ''
+      };
+    });
+    const segments = detail.transcript && Array.isArray(detail.transcript.segments) ? detail.transcript.segments : [];
+    const planned = correctionBaselinePlan(correctionJobId(), detail.source, detail.jobId, rows, segments);
+    if (!planned) return;
+    planned.forEach((row, index) => {
+      const art = arts[index];
+      const box = art ? art.querySelector('.ag-seg__text') : null;
+      if (!box || row === rows[index]) return;
+      box.dataset.agiloLoaded = row.loaded;
+      if (model && model[index] && String(model[index].id || '') === String(art.dataset.id || '')) {
+        model[index].text = row.modelText;
+      }
     });
   }
   function correctionOnTranscriptTab() {
@@ -4958,6 +5022,7 @@
     correctionReadyJob = '';
     correctionErrorJob = '';
     correctionErrorReason = '';
+    correctionLaunchText = '';
     correctionCloseDialog();
     correctionSetButton('idle');
   }
@@ -5000,13 +5065,16 @@
     incoming.forEach((seg, i) => {
       const next = decodeNL(seg.text);
       const box = arts[i].querySelector('.ag-seg__text');
-      const prev = box ? (box.textContent || '') : (model[i].text || '');
+      const prev = box ? correctionVisibleText(box) : (model[i].text || '');
       if (next === prev) return;
       changed++;
-      model[i].text = next;
       if (box) {
         box.textContent = next;
-        box.dataset.agiloLoaded = next;
+        const shown = correctionVisibleText(box);
+        box.dataset.agiloLoaded = shown;
+        model[i].text = shown;
+      } else {
+        model[i].text = next;
       }
       arts[i].classList.add('is-flash');
       setTimeout(() => arts[i].classList.remove('is-flash'), 2000);
@@ -5084,9 +5152,15 @@
         return;
       }
       if (correctionDirty()) {
-        toast('Enregistrez ou abandonnez vos modifications d’abord.');
-        return;
+        const saved = await correctionSaveNow();
+        if (epoch !== correctionEpoch || jobId !== correctionJobId()) return;
+        if (!(saved && saved.ok && saved.verified)) return;
+        if (correctionDirty()) {
+          toast('Enregistrez ou abandonnez vos modifications d’abord.');
+          return;
+        }
       }
+      correctionLaunchText = correctionScreenStamp();
       correctionStatus = 'running';
       if (!correctionStarted) correctionStarted = Date.now();
       correctionSetButton('running');
@@ -5141,7 +5215,7 @@
     correctionStatus = 'idle';
     correctionSetButton('idle');
     if (status === 'ready') {
-      if (correctionDirty()) {
+      if (correctionDirty() || correctionScreenStamp() !== correctionLaunchText) {
         toast('Enregistrez ou abandonnez vos modifications d’abord.');
         return;
       }
@@ -5360,10 +5434,6 @@
       toast('Terminez ou annulez l’anonymisation d’abord.');
       return;
     }
-    if (correctionDirty()) {
-      toast('Enregistrez ou abandonnez vos modifications d’abord.');
-      return;
-    }
     const jobId = correctionJobId();
     if (jobId && correctionReadyJob === jobId) {
       correctionOpenNotice('done');
@@ -5407,6 +5477,12 @@
   }
   function correctionBoot() {
     if (EDITION !== 'ent') return;
+    if (!correctionBaselineBound) {
+      correctionBaselineBound = true;
+      window.addEventListener('agilo:transcript-saved', (event) => {
+        correctionAdoptSaved(event && event.detail);
+      });
+    }
     if (!document.getElementById('agilo-correction-style')) {
       const style = document.createElement('style');
       style.id = 'agilo-correction-style';
