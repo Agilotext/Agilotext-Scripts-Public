@@ -13,11 +13,56 @@
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
   const READ_ENDPOINT = API_BASE + '/receiveTextJson';
   const TOKEN_GET = API_BASE + '/getToken';
-  const VERSION   = 'save-manual-simple-v1.2-verified';
+  const VERSION   = 'save-manual-simple-v1.3-clocks';
   const REQUEST_TIMEOUT_MS = 45000;
 
   const MIN_CONTENT_LENGTH = 10;  // min caractères pour considérer qu'il y a un transcript
   const MIN_SEGMENTS_COUNT = 1;   // min segments
+  const CLOCKS_ABSENT_TOAST = 'Horodatage absent, enregistrement arrêté pour ne pas effacer la durée.';
+
+  function agiloKnownAudioMs(){
+    let best = Number(window.__agiloAudioDurationMs) || 0;
+    const nodes = document.querySelectorAll('#agilo-audio, audio');
+    nodes.forEach((node) => {
+      const seconds = Number(node.duration);
+      if (Number.isFinite(seconds)) best = Math.max(best, Math.round(seconds * 1000));
+    });
+    return best;
+  }
+
+  function agiloClocksAbsent(segments, audioMs, flagged){
+    if (!Array.isArray(segments) || segments.length <= 1) return false;
+    let maxSec = 0;
+    for (const s of segments) {
+      const end = Number(s.endSec != null ? s.endSec : s.end);
+      const start = Number(s.startSec != null ? s.startSec : s.start);
+      if (Number.isFinite(end)) maxSec = Math.max(maxSec, end);
+      if (Number.isFinite(start)) maxSec = Math.max(maxSec, start);
+    }
+    if (maxSec > 0) return false;
+    if (flagged) return true;
+    return Number(audioMs) > 10000;
+  }
+
+  function agiloAudioDurationPending(segments){
+    if (!Array.isArray(segments) || segments.length <= 1) return false;
+    let maxSec = 0;
+    for (const s of segments) {
+      const end = Number(s.endSec != null ? s.endSec : s.end);
+      const start = Number(s.startSec != null ? s.startSec : s.start);
+      if (Number.isFinite(end)) maxSec = Math.max(maxSec, end);
+      if (Number.isFinite(start)) maxSec = Math.max(maxSec, start);
+    }
+    if (maxSec > 0 || Number(window.__agiloAudioDurationMs) > 10000) return false;
+    const nodes = document.querySelectorAll('#agilo-audio, audio');
+    if (!nodes.length) return false;
+    let known = false;
+    nodes.forEach((node) => {
+      const seconds = Number(node.duration);
+      if (Number.isFinite(seconds) && seconds > 0) known = true;
+    });
+    return !known;
+  }
 
   // ========= Petits helpers =========
   const $  = (sel, root=document) => root.querySelector(sel);
@@ -270,10 +315,8 @@
         text: String(s.text || '')
       };
     });
-    const milli_duration = segMs.reduce((m, s) => {
-      const end = s.milli_end || s.milli_start || 0;
-      return Math.max(m, end);
-    }, 0);
+    const fromSegments = segMs.reduce((m, s) => Math.max(m, Number(s.milli_end) || 0, Number(s.milli_start) || 0), 0);
+    const milli_duration = fromSegments > 0 ? fromSegments : agiloKnownAudioMs();
     const speakerLabels = segMs.some(s => {
       const sp = String(s.speaker || '').trim();
       return sp && sp !== 'Speaker_A';
@@ -579,6 +622,19 @@
 
       if (String(pickJobId()) !== String(creds.jobId)) {
         throw Object.assign(new Error('Le dossier affiché a changé avant la sauvegarde.'), { code:'job_changed' });
+      }
+
+      if (agiloAudioDurationPending(segments)) {
+        if (btn) btn.textContent = btn.__idleText;
+        return { ok:false, reason:'audio_duration_pending' };
+      }
+
+      const audioMs = agiloKnownAudioMs();
+      if (agiloClocksAbsent(segments, audioMs, window.__agiloClocksAbsent)) {
+        const msg = CLOCKS_ABSENT_TOAST;
+        if (btn) btn.textContent = btn.__idleText;
+        userNotice(msg);
+        return { ok:false, reason:'clocks_absent', error:msg };
       }
 
       // 5) Envoi
