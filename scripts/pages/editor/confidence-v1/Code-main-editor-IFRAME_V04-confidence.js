@@ -5487,7 +5487,7 @@
       const style = document.createElement('style');
       style.id = 'agilo-correction-style';
       style.textContent = [
-        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle;flex:0 0 auto}',
+        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0;vertical-align:middle;flex:0 0 auto}',
         '.agilo-correction-hint,[data-agilo-correction-slot] [data-agilo-correction-progress]{display:none !important}',
         '[data-agilo-correction-transcript-wait] > :not([data-agilo-correction-loader]){display:none !important}',
         '.agilo-correction-center{width:100%;box-sizing:border-box}',
