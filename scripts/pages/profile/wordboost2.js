@@ -1,4 +1,4 @@
-/* WORD-BOOST v2 – 2026-10-26 • r14.3
+/* WORD-BOOST v2 – 2026-10-26 • r14.4
    - Messages d’erreur de set/get/rename/delete/défaut traduits, sans code technique ni jeton
    - Si setWordBoost2 répond error_word_boost_not_ready : attendre READY, renvoyer la liste, ne pas afficher un succès faux
    - Au passage READY, ne pas réécrire l’écran avec une liste serveur différente de celle envoyée
@@ -539,6 +539,14 @@
     if (!silent && stats.added && stats.corrected.length) {
       const sample = stats.corrected.slice(0, 3).map(x => `« ${x.from} »→« ${x.to} »`).join(", ");
       toast(`Normalisé : ${sample}`, null, 4000);
+    } else if (!silent && !stats.added && (stats.invalid || stats.tooShort)) {
+      toast(
+        stats.tooShort && !stats.invalid
+          ? "Trop court : 2 caractères minimum."
+          : "Caractère non accepté. Lettres, chiffres, espaces, apostrophes et tirets seulement.",
+        null,
+        4000
+      );
     }
     return stats;
   };
@@ -805,11 +813,11 @@
       }
 
       lastSaveOK = Date.now();
-      savedWords = norm(current.words);
+      savedWords = norm(listSent);
 
       toast("Enregistré ✓");
       if (current.id > 0) pollStatus(current.id);
-      render(current.words);
+      render(listSent);
 
       if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
     } catch (e) {
