@@ -1,4 +1,5 @@
-/* WORD-BOOST v2 – 2026-10-26 • r14.2
+/* WORD-BOOST v2 – 2026-10-26 • r14.3
+   - Messages d’erreur de set/get/rename/delete/défaut traduits, sans code technique ni jeton
    - Si setWordBoost2 répond error_word_boost_not_ready : attendre READY, renvoyer la liste, ne pas afficher un succès faux
    - Au passage READY, ne pas réécrire l’écran avec une liste serveur différente de celle envoyée
    - Load-path sanitize + unwrap artefact Java List.toString ([oiuytr])
@@ -126,24 +127,78 @@
     return msg;
   };
 
-  const errorDetailFromApi = userErrorMessage => {
-    const match = String(userErrorMessage || "").match(/got "([^"]+)"/);
-    return match ? ` — mot suspect : « ${match[1]} »` : "";
-  };
-
   const isBracketServerErrorMessage = userErrorMessage =>
     /got "\[[^\"]*\]"/.test(String(userErrorMessage || ""));
 
-  const formatOnErrorToast = userErrorMessage => {
-    const detail = errorDetailFromApi(userErrorMessage);
-    if (isBracketServerErrorMessage(userErrorMessage)) {
-      return (
-        "Erreur serveur sur l’enregistrement de la liste (format technique avec crochets). " +
-        "Ce n’est probablement pas votre mot. Réessayez ou contactez le support." +
-        detail
-      );
+  const quotedTerm = raw => {
+    const match = String(raw || "").match(/"([^"]{1,80})"/);
+    if (!match) return "";
+    const term = match[1];
+    if (/error_|token|exception|at com\./i.test(term)) return "";
+    return term;
+  };
+
+  const formatWordBoostError = raw => {
+    const msg = String(raw || "");
+    const low = msg.toLowerCase();
+    if (!msg.trim()) return "L’enregistrement n’a pas abouti. Réessayez dans un moment.";
+    if (low.includes("error_invalid_token")) return "La session a expiré. Rechargez la page.";
+    if (low.includes("error_too_many_calls") || low.includes("error_too_much_traffic")) {
+      return "Trop de tentatives. Patientez un instant, puis réessayez.";
     }
-    return (userErrorMessage || "Erreur serveur") + detail + ". Vérifiez votre liste et réessayez.";
+    if (low.includes("error_word_boost_not_ready")) {
+      return "L’enregistrement précédent n’est pas terminé. Réessayez dans un moment.";
+    }
+    if (low.includes("error_invalid_boost_id")) return "Ce thème est introuvable. Rechargez la page.";
+    if (
+      low.includes("the word boost list is empty") ||
+      low.includes("word_boost cannot be empty") ||
+      low.includes("word_boost cannot be null")
+    ) {
+      return "La liste doit contenir au moins un terme.";
+    }
+    if (low.includes("requested parameter is missing")) return "Il manque une information. Rechargez la page.";
+    if (low.includes("streaming") || low.includes("word_boost payload")) {
+      return "La liste est trop longue pour l’enregistrement direct.";
+    }
+    if (low.includes("error_invalid_boost_word") || low.includes("keyword ") || low.includes("keyword\"")) {
+      const term = quotedTerm(msg);
+      if (low.includes("illegal characters")) {
+        return term
+          ? `Le terme « ${term} » contient un caractère non accepté.`
+          : "Un terme contient un caractère non accepté.";
+      }
+      if (low.includes("exceeds") && low.includes("characters")) {
+        return term ? `Le terme « ${term} » est trop long.` : "Un terme est trop long.";
+      }
+      if (low.includes("is blank")) return "Un terme est vide.";
+      if (low.includes("duplicate keyword")) {
+        return term ? `Le terme « ${term} » est déjà dans la liste.` : "Un terme est en double.";
+      }
+      if (low.includes("streaming")) return "La liste est trop longue pour l’enregistrement direct.";
+      return term ? `Le terme « ${term} » n’est pas accepté.` : "Un terme n’est pas accepté.";
+    }
+    if (isBracketServerErrorMessage(msg)) {
+      return "L’enregistrement a échoué à cause d’un format technique. Réessayez. Si ça revient, contactez le support.";
+    }
+    if (/exception|stacktrace|at com\.|error_|\bcannot\b|\bnull\b|\binvalid\b|\bmissing\b|\bsql\b|ora-/i.test(msg)) {
+      return "L’enregistrement n’a pas abouti. Réessayez dans un moment.";
+    }
+    const clean = msg.replace(/\s*\([^)]{0,240}\)/g, "").trim();
+    if (!clean || /error_|exception|token/i.test(clean)) {
+      return "L’enregistrement n’a pas abouti. Réessayez dans un moment.";
+    }
+    return clean;
+  };
+
+  const formatOnErrorToast = userErrorMessage => {
+    if (isBracketServerErrorMessage(userErrorMessage)) {
+      return "L’enregistrement a échoué à cause d’un format technique. Réessayez. Si ça revient, contactez le support.";
+    }
+    if (/^une erreur s'est produite/i.test(String(userErrorMessage || "").trim())) {
+      return "L’enregistrement de la liste a échoué. Vérifiez les termes, puis réessayez.";
+    }
+    return formatWordBoostError(userErrorMessage);
   };
 
   const LAST_KEY = "wb2:lastThemeId";
@@ -151,7 +206,7 @@
   // Toast UX
   const toast = (msg, extra = null, ms = 2600) => {
     const el = document.createElement("div");
-    el.innerHTML = msg;
+    el.appendChild(document.createTextNode(String(msg ?? "")));
     el.style.cssText = `
       position:fixed;bottom:20px;left:20px;
       background:#111;color:#fff;
@@ -363,7 +418,7 @@
     if (!email || !token) return;
     try {
       const r = await apiInfo({ username: email, token, edition: EDITION });
-      if (r.status !== "OK") throw new Error(r.errorMessage);
+      if (r.status !== "OK") throw new Error(formatWordBoostError(r.errorMessage));
       catalog.defaultId = +r.defaultBoostId || 0;
       catalog.list = (r.boostNamesDTOList || []).map(x => ({
         id: +x.boostId,
@@ -664,7 +719,7 @@
           boostName: nameNow,
           name: nameNow
         });
-        if (rn.status !== "OK") throw new Error(rn.errorMessage);
+        if (rn.status !== "OK") throw new Error(formatWordBoostError(rn.errorMessage));
         current.name = nameNow;
         const ent = catalog.list.find(x => x.id === current.id);
         if (ent) ent.name = nameNow;
@@ -674,7 +729,7 @@
         if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
       } catch (e) {
         console.error(e);
-        toast("Erreur : " + e.message);
+        toast(formatWordBoostError(e.message));
       } finally {
         spinOn(false);
         $save.disabled = false;
@@ -721,7 +776,7 @@
           toast("Serveur occupé… nouvelle tentative.");
           await new Promise(res => setTimeout(res, RETRY_3S));
           r = await apiSet(payload);
-          if (r.status !== "OK") throw new Error(r.errorMessage);
+          if (r.status !== "OK") throw new Error(formatWordBoostError(r.errorMessage));
         } else if (err === "error_word_boost_not_ready") {
           toast("Le serveur finit encore l’enregistrement précédent. On réessaie.");
           setStatus("pending");
@@ -732,9 +787,9 @@
             return;
           }
           r = await apiSet(payload);
-          if (r.status !== "OK") throw new Error(r.errorMessage || "error");
+          if (r.status !== "OK") throw new Error(formatWordBoostError(r.errorMessage));
         } else {
-          throw new Error(err);
+          throw new Error(formatWordBoostError(err));
         }
       }
 
@@ -759,7 +814,7 @@
       if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
     } catch (e) {
       console.error(e);
-      toast("Erreur : " + e.message);
+      toast(formatWordBoostError(e.message));
       setStatus("error");
     } finally {
       spinOn(false);
@@ -794,10 +849,10 @@
         fillSelect();
         localStorage.setItem(LAST_KEY, String(current.id));
       } else {
-        toast(r.errorMessage);
+        toast(formatWordBoostError(r.errorMessage));
       }
     } catch (e) {
-      toast("Erreur défaut : " + e.message);
+      toast(formatWordBoostError(e.message));
     }
   };
 
@@ -843,10 +898,10 @@
         await loadCatalog(false);
         await loadTheme(current.id);
       } else {
-        toast(r.errorMessage);
+        toast(formatWordBoostError(r.errorMessage));
       }
     } catch (e) {
-      toast("Erreur suppression : " + e.message);
+      toast(formatWordBoostError(e.message));
     }
   };
 
