@@ -1,4 +1,9 @@
-/* WORD-BOOST v2 – 2026-06-17 • r14
+/* WORD-BOOST v2 – 2026-10-26 • r14.2
+   - Si setWordBoost2 répond error_word_boost_not_ready : attendre READY, renvoyer la liste, ne pas afficher un succès faux
+   - Au passage READY, ne pas réécrire l’écran avec une liste serveur différente de celle envoyée
+   - Load-path sanitize + unwrap artefact Java List.toString ([oiuytr])
+   - Re-sanitize avant setWordBoost2
+   - Toast ON_ERROR dédié si got "[...]"
    - Ligatures (œ→oe), typographic fi/fl, 6 mots max
    - CSV/txt multi-encodage, guide Excel
    - Toasts détaillés, ON_ERROR mot suspect
@@ -43,14 +48,58 @@
   const SEG = "[A-Za-zÀ-ÖØ-öø-ÿ0-9''\\-]+";
   const WORD_RE = new RegExp(`^${SEG}(\\s+${SEG}){0,5}$`);
 
-  const validateWordLocal = raw => {
+  /** Artefact Java List.toString() : `[oiuytr]` / `["oiuytr"]` */
+  const unwrapBracketArtifact = raw => {
     const trimmed = trim(raw);
+    const m = /^\[(.*)\]$/.exec(trimmed);
+    if (!m) return { unwrapped: false, value: trimmed };
+    const innerRaw = m[1].trim();
+    if (/,/.test(innerRaw)) return { unwrapped: true, value: null, reason: "list_tostring" };
+    let inner = innerRaw;
+    if (
+      (inner.startsWith('"') && inner.endsWith('"')) ||
+      (inner.startsWith("'") && inner.endsWith("'"))
+    ) {
+      inner = inner.slice(1, -1);
+    }
+    inner = trim(inner);
+    if (!inner) return { unwrapped: true, value: null, reason: "invalide" };
+    return { unwrapped: true, value: inner };
+  };
+
+  const validateWordLocal = raw => {
+    const bracket = unwrapBracketArtifact(raw);
+    if (bracket.unwrapped && bracket.value == null) {
+      return { ok: false, reason: bracket.reason || "invalide", normalized: trim(raw), corrected: false };
+    }
+    const source = bracket.value;
+    const trimmed = trim(source);
     const normalized = normalizeLigatures(trimmed);
-    const corrected = normalized !== trimmed;
+    const corrected = normalized !== trim(raw) || bracket.unwrapped;
     if (normalized.length < MIN_WORD_LEN) return { ok: false, reason: "trop_court", normalized, corrected };
     if (normalized.length > 100) return { ok: false, reason: "trop_long", normalized, corrected };
     if (!WORD_RE.test(normalized)) return { ok: false, reason: "invalide", normalized, corrected };
     return { ok: true, normalized, corrected };
+  };
+
+  const sanitizeWordListLocal = words => {
+    const out = [];
+    const corrected = [];
+    const rejected = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(words) ? words : []) {
+      const v = validateWordLocal(raw);
+      if (!v.ok) {
+        rejected.push({ word: trim(raw), reason: v.reason || "invalide" });
+        continue;
+      }
+      const key = lower(v.normalized);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (v.corrected) corrected.push({ from: trim(raw), to: v.normalized });
+      out.push(v.normalized);
+    }
+    return { words: out, corrected, rejected };
   };
 
   const looksLikeMojibake = text => /[\uFFFD]/.test(text) || /(?:Ã.|Â.)/.test(text);
@@ -80,6 +129,21 @@
   const errorDetailFromApi = userErrorMessage => {
     const match = String(userErrorMessage || "").match(/got "([^"]+)"/);
     return match ? ` — mot suspect : « ${match[1]} »` : "";
+  };
+
+  const isBracketServerErrorMessage = userErrorMessage =>
+    /got "\[[^\"]*\]"/.test(String(userErrorMessage || ""));
+
+  const formatOnErrorToast = userErrorMessage => {
+    const detail = errorDetailFromApi(userErrorMessage);
+    if (isBracketServerErrorMessage(userErrorMessage)) {
+      return (
+        "Erreur serveur sur l’enregistrement de la liste (format technique avec crochets). " +
+        "Ce n’est probablement pas votre mot. Réessayez ou contactez le support." +
+        detail
+      );
+    }
+    return (userErrorMessage || "Erreur serveur") + detail + ". Vérifiez votre liste et réessayez.";
   };
 
   const LAST_KEY = "wb2:lastThemeId";
@@ -346,7 +410,19 @@
         edition: EDITION,
         boostId: current.id
       });
-      savedWords = norm(parseWB(r));
+      const parsed = norm(parseWB(r));
+      const cleaned = sanitizeWordListLocal(parsed);
+      savedWords = cleaned.words;
+      if (cleaned.corrected.length || cleaned.rejected.length) {
+        const parts = [];
+        if (cleaned.corrected.length) {
+          parts.push(`${cleaned.corrected.length} terme(s) normalisé(s) au chargement`);
+        }
+        if (cleaned.rejected.length) {
+          parts.push(`${cleaned.rejected.length} terme(s) invalide(s) ignoré(s)`);
+        }
+        toast(parts.join(" · ") + ".", null, 4500);
+      }
     } catch (e) {
       console.error(e);
       toast("Erreur lors du chargement des mots.");
@@ -440,6 +516,27 @@
     });
   };
 
+  const waitBoost = async boostId => {
+    if (!(boostId > 0)) return "READY";
+    const start = Date.now();
+    while (Date.now() - start < STATUS_MAX) {
+      try {
+        const r = await apiStat({
+          username: email,
+          token,
+          edition: EDITION,
+          boostId
+        });
+        if (r.status === "OK") {
+          const st = (r.wordboostStatus || "").toUpperCase();
+          if (st === "READY" || st === "ON_ERROR") return st;
+        }
+      } catch (_e) {}
+      await new Promise(res => setTimeout(res, STATUS_POLL));
+    }
+    return "TIMEOUT";
+  };
+
   // Status polling
   const pollStatus = async boostId => {
     setStatus("pending");
@@ -457,7 +554,6 @@
           const st = (r.wordboostStatus || "").toUpperCase();
           if (st === "READY") {
             setStatus("ready");
-            toast("C’est prêt ✓");
             try {
               const g = await apiGet({
                 username: email,
@@ -465,14 +561,17 @@
                 edition: EDITION,
                 boostId
               });
-              savedWords = norm(parseWB(g));
-              render(savedWords);
+              const fromServer = sanitizeWordListLocal(norm(parseWB(g))).words;
+              if (sameWords(fromServer, savedWords)) {
+                toast("C’est prêt ✓");
+                render(savedWords);
+              }
             } catch (_e) {}
             return;
           }
           if (st === "ON_ERROR") {
             setStatus("error");
-            toast((r.userErrorMessage || "Erreur serveur") + errorDetailFromApi(r.userErrorMessage) + ". Vérifiez votre liste et réessayez.", null, 7000);
+            toast(formatOnErrorToast(r.userErrorMessage), null, 8000);
             return;
           }
         }
@@ -497,7 +596,11 @@
       await new Promise(r => setTimeout(r, 80));
     }
 
-    const listSent = [...current.words];
+    const cleanedBeforeSave = sanitizeWordListLocal(current.words);
+    if (cleanedBeforeSave.corrected.length || cleanedBeforeSave.rejected.length) {
+      render(cleanedBeforeSave.words);
+    }
+    const listSent = [...cleanedBeforeSave.words];
     const nameNow = trim($name?.value || "");
 
     // 1) Validation : nom obligatoire
@@ -620,13 +723,16 @@
           r = await apiSet(payload);
           if (r.status !== "OK") throw new Error(r.errorMessage);
         } else if (err === "error_word_boost_not_ready") {
-          toast("Modifications enregistrées ✓");
+          toast("Le serveur finit encore l’enregistrement précédent. On réessaie.");
           setStatus("pending");
-          await loadCatalog(true);
-          pollStatus(current.id || r.boostId);
-          lastSaveOK = Date.now();
-          if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
-          return;
+          const ready = await waitBoost(current.id);
+          if (ready !== "READY") {
+            toast("L’enregistrement n’a pas abouti. Réessayez dans un moment.");
+            setStatus(ready === "ON_ERROR" ? "error" : "pending");
+            return;
+          }
+          r = await apiSet(payload);
+          if (r.status !== "OK") throw new Error(r.errorMessage || "error");
         } else {
           throw new Error(err);
         }
