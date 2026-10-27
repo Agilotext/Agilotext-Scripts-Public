@@ -1,4 +1,5 @@
-/* WORD-BOOST v2 – 2026-10-26 • r14.4
+/* WORD-BOOST v2 – 2026-10-27 • r14.5
+   - Édition et limite lues sur la page : défaut ent / 100, pro / 40
    - Messages d’erreur de set/get/rename/delete/défaut traduits, sans code technique ni jeton
    - Si setWordBoost2 répond error_word_boost_not_ready : attendre READY, renvoyer la liste, ne pas afficher un succès faux
    - Au passage READY, ne pas réécrire l’écran avec une liste serveur différente de celle envoyée
@@ -20,8 +21,12 @@
 */
 (() => {
   const API = "https://api.agilotext.com/api/v1",
-        EDITION = "ent",
-        LIMIT = 100;
+        EDITION = String(window.AGILO_WORDBOOST_EDITION || "ent").toLowerCase(),
+        LIMIT = (() => {
+          const raw = Number(window.AGILO_WORDBOOST_LIMIT);
+          const fallback = EDITION === "pro" ? 40 : 100;
+          return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : fallback;
+        })();
 
   // Timers
   const POLL_DOM = 200,
