@@ -1,5 +1,5 @@
 /**
- * Tests logique post-login v8.9 (CSE 89 € / 890 € → dashboard business, porte Index)
+ * Tests logique post-login v8.10 (CSE 89 € / 890 € → dashboard business, porte Index)
  * Exécution : node --test tests/post-login-router.test.js
  */
 
@@ -10,7 +10,7 @@ const path = require("node:path");
 const router = require("../scripts/pages/auth/post-login-router.js");
 const security = require("../scripts/shared/agilo-security-tenant.js");
 
-const { getTeamSignals, getEditionSignals, resolveRoute, VERSION, readPendingCsePrice, consumePendingCsePrice, posthogOffer, identifyPosthogMember } = router;
+const { getTeamSignals, getEditionSignals, resolveRoute, VERSION, readPendingCsePrice, consumePendingCsePrice, posthogOffer, identifyPosthogMember, hasEnoughPlanData } = router;
 
 const supportSeat = {
   teams: {
@@ -56,8 +56,8 @@ const freePlusAnon = {
 };
 
 describe("version", () => {
-  it("exporte v8.9", () => {
-    assert.equal(VERSION, "v8.9");
+  it("exporte v8.10", () => {
+    assert.equal(VERSION, "v8.10");
   });
 });
 
@@ -403,16 +403,37 @@ describe("porte Index", () => {
   });
 });
 
-describe("posthogOffer v8.9", () => {
-  it("sépare le CSE du Business et n'envoie pas l'e-mail", () => {
+describe("posthogOffer v8.10", () => {
+  it("le CSE seul est cse, le Business avec un CSE reste business", () => {
     assert.equal(posthogOffer(getEditionSignals({
       planConnections: [{ status: "ACTIVE", planId: "pln_cse-mensuel", active: true }]
     })), "cse");
+    assert.equal(posthogOffer(getEditionSignals({
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_cse-ic00nme", active: true },
+        { status: "ACTIVE", planId: "pln_business-1-seat-q85y0ozf", active: true }
+      ]
+    })), "business");
     assert.equal(posthogOffer(getEditionSignals(supportSeat)), "business");
     assert.equal(posthogOffer(getEditionSignals(florianOwner)), "pro");
     assert.equal(posthogOffer(getEditionSignals(classicOnly)), "agiloshield");
     assert.equal(posthogOffer(getEditionSignals(freePlusAnon)), "free");
     assert.equal(posthogOffer(getEditionSignals(legacyAnonOnly)), "agiloshield");
+  });
+
+  it("un loginRedirect gratuit sans plan ne suffit pas, un CSE actif oui", () => {
+    assert.equal(hasEnoughPlanData({
+      loginRedirect: "/app/free/dashboard",
+      planConnections: []
+    }), false);
+    assert.equal(hasEnoughPlanData({
+      loginRedirect: "/app/free/dashboard",
+      planConnections: [{ status: "ACTIVE", planId: "pln_cse-ic00nme", active: true }]
+    }), true);
+    assert.equal(resolveRoute(getEditionSignals({
+      loginRedirect: "/app/free/dashboard",
+      planConnections: [{ status: "ACTIVE", planId: "pln_cse-5920aby", active: true }]
+    }), true).targetRoute, "/app/business/dashboard");
   });
 
   it("identify envoie l'id et l'édition, pas l'e-mail", () => {

@@ -11,6 +11,7 @@
 /* v8.7: CSE_PRICE_IDS = neufs seulement (préfixe pln_cse- inchangé) */
 /* v8.8: compte @index-education.com, security-status avant mobile, invitation et CSE */
 /* v8.9: PostHog identify (id membre, édition, environnement). Pas d'e-mail. */
+/* v8.10: Business avant CSE pour PostHog. Un loginRedirect /app/free/ n'est pas un plan. */
 /* Le helper scripts/shared/agilo-security-tenant.js doit être collé avant ce script. */
 /* ===================================================== */
 /* Déploiement Webflow : coller ce script sur la page /auth/post-login */
@@ -18,7 +19,7 @@
 (function (root) {
   "use strict";
 
-  const VERSION = "v8.9";
+  const VERSION = "v8.10";
   const API_BASE = "https://api.agilotext.com/api/v1";
   const FREE_PLAN_ID = "pln_free-njg10umr";
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
@@ -246,15 +247,30 @@
     return { targetRoute: "/app/free/dashboard", decisionReason: "fallback_free" };
   }
 
-  /* Édition envoyée à PostHog. Le CSE reste distinct du Business. */
+  /* Édition PostHog. Le dashboard Business accueille aussi le CSE seul.
+     L'édition reste business si un plan Business ou un siège est déjà là. */
   function posthogOffer(signals) {
     if (!signals) return "free";
-    if (signals.hasCse) return "cse";
     if (signals.hasBusiness || signals.isSeat) return "business";
+    if (signals.hasCse) return "cse";
     if (signals.hasPro) return "pro";
     if (signals.hasFree) return "free";
     if (signals.hasAgiloshield || signals.hasLegacyAnon) return "agiloshield";
     return "free";
+  }
+
+  /* Un ancien loginRedirect /app/free/ ne prouve pas l'absence de plan CSE. */
+  function hasEnoughPlanData(member) {
+    const connections = getConnections(member);
+    const plans = getPlans(member);
+    const hasActiveConnection = connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)));
+    if (hasActiveConnection) return true;
+    if (connections.length === 0 && plans.some((p) => isPlanObjectActive(p) || isFreeLikePlan(p))) return true;
+    const onboardingRaw = String(member?.customFields?.["onboarding-done"] || "").toLowerCase();
+    if (onboardingRaw && !["1", "true", "skipped"].includes(onboardingRaw)) return true;
+    const teamSignals = getTeamSignals(member);
+    if (teamSignals.hasTeamMembership) return true;
+    return false;
   }
 
   function identifyPosthogMember(member, signals) {
@@ -291,6 +307,7 @@
     readPendingCsePrice: readPendingCsePrice,
     consumePendingCsePrice: consumePendingCsePrice,
     posthogOffer: posthogOffer,
+    hasEnoughPlanData: hasEnoughPlanData,
     identifyPosthogMember: identifyPosthogMember
   };
   if (typeof module !== "undefined" && module.exports) {
@@ -431,24 +448,7 @@
     }
 
     function hasEnoughDataToRedirect(member) {
-      const connections = getConnections(member);
-      const plans = getPlans(member);
-
-      const hasActiveConnection = connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)));
-      if (hasActiveConnection) return true;
-
-      if (connections.length === 0 && plans.some((p) => isPlanObjectActive(p) || isFreeLikePlan(p))) return true;
-
-      const loginRedirect = String(member?.loginRedirect || "");
-      if (loginRedirect.startsWith("/app/free/")) return true;
-
-      const onboardingRaw = String(member?.customFields?.["onboarding-done"] || "").toLowerCase();
-      if (onboardingRaw && !["1", "true", "skipped"].includes(onboardingRaw)) return true;
-
-      const teamSignals = getTeamSignals(member);
-      if (teamSignals.hasTeamMembership) return true;
-
-      return false;
+      return hasEnoughPlanData(member);
     }
 
     async function fetchMemberStable(ms, maxMs = 7000) {
