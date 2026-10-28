@@ -483,6 +483,9 @@
                 var ms = await waitMs(8000);
                 if (ms && typeof ms.logout === 'function') await ms.logout();
             } catch (_) { }
+            try {
+                if (window.posthog && typeof window.posthog.reset === 'function') window.posthog.reset();
+            } catch (_) { }
             localStorage.removeItem('agilotext_mobile_auth');
             localStorage.removeItem('pendingInviteCode');
             sessionStorage.removeItem('_agilo_redirect_count');
