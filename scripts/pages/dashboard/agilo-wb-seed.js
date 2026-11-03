@@ -170,13 +170,13 @@
               releaseLock(storage);
               return;
             }
+            storage.setItem(MARKER_KEY, names.id);
             return post(win, "setWordBoostDefault2", {
               username: email,
               token: token,
               edition: edition,
               boostId: String(boostId)
             }).then(function () {
-              storage.setItem(MARKER_KEY, names.id);
               releaseLock(storage);
             });
           });
