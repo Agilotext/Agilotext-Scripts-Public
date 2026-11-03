@@ -15,7 +15,7 @@ Le picker déjà en place : `agilo-wb-picker.js@d9f19c90`. Le profil Premium et 
 Pin, juste après le picker :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/dashboard/agilo-wb-seed.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9fb6630c4bf24e5239f2e4976c725fbd7806ef13/scripts/pages/dashboard/agilo-wb-seed.js"></script>
 ```
 
 Pas de collage du fichier. Pas dans le head du site. Staging d’abord. www et l’apex seulement avec une phrase qui nomme les tableaux de bord Premium et Business.
