@@ -57,6 +57,23 @@
     return t || null;
   }
 
+  function countsFromFolderApi(payload) {
+    const body = payload || {};
+    const rootRaw = body.rootJobsCount != null ? body.rootJobsCount : body.rootCount;
+    let rootJobsCount = Number(rootRaw);
+    if (!Number.isFinite(rootJobsCount) || rootJobsCount < 0) rootJobsCount = 0;
+    const rawList = body.folders || body.transcriptFolderDtos || body.transcriptFolders || body.folderDtos || [];
+    let folderSum = 0;
+    (Array.isArray(rawList) ? rawList : []).forEach((folder) => {
+      const folderId = Number(folder.folderId != null ? folder.folderId : folder.id) || 0;
+      const folderName = String(folder.folderName != null ? folder.folderName : folder.name || '').trim();
+      if (folderId <= 0 || !folderName) return;
+      const jobsCount = Number(folder.jobsCount != null ? folder.jobsCount : folder.count);
+      if (Number.isFinite(jobsCount) && jobsCount > 0) folderSum += jobsCount;
+    });
+    return rootJobsCount + folderSum;
+  }
+
   function fetchAndUpdateReadyCount(token, editionOverride) {
     const userEmail = getUserEmail();
     if (!userEmail || !token) {
@@ -67,13 +84,12 @@
     const edition = pickEdition(editionOverride);
 
     const url =
-      'https://api.agilotext.com/api/v1/getJobsInfo?username=' +
+      'https://api.agilotext.com/api/v1/getTranscriptFolders?username=' +
       encodeURIComponent(userEmail) +
       '&token=' +
       encodeURIComponent(token) +
       '&edition=' +
-      encodeURIComponent(edition) +
-      '&limit=1000&offset=0';
+      encodeURIComponent(edition);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
@@ -89,15 +105,9 @@
         return response.json();
       })
       .then((data) => {
-        if (data.status === 'OK') {
-          let readyCount = 0;
-          data.jobsInfoDtos.forEach((job) => {
-            if (job.transcriptStatus === 'READY_SUMMARY_READY') {
-              readyCount++;
-            }
-          });
+        if (String(data.status || '').toUpperCase() === 'OK') {
           const countEl = document.getElementById('readyCount');
-          if (countEl) countEl.textContent = readyCount;
+          if (countEl) countEl.textContent = String(countsFromFolderApi(data));
         } else {
           if (window.AGILO_DEBUG) console.error('[ready-count] API:', data.errorMessage);
         }

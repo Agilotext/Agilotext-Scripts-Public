@@ -278,18 +278,8 @@
     });
   }
 
-  function updateReadyCount(visibleRows) {
-    const readyCountEl = document.getElementById('readyCount');
-    if (!readyCountEl) return;
-    let n = 0;
-    visibleRows.forEach((row) => {
-      const jobId = rowJobId(row);
-      if (!jobId) return;
-      const meta = state.jobsById.get(jobId);
-      if (!meta) return;
-      if (String(meta.transcriptStatus || '').toUpperCase() === 'READY_SUMMARY_READY') n += 1;
-    });
-    readyCountEl.textContent = String(n);
+  function updateReadyCount() {
+    // Le badge Mes fichiers vient de getTranscriptFolders. Le filtre des lignes ne le réécrit pas.
   }
 
   function isServerPaginationActive() {

@@ -51,6 +51,10 @@
   }
 
   function getEdition() {
+    const path = String(location.pathname || '');
+    if (path.includes('/app/free/')) return 'free';
+    if (path.includes('/app/pro/') || path.includes('/app/premium/')) return 'pro';
+    if (path.includes('/app/ent/') || path.includes('/app/business/')) return 'ent';
     const fromQS = new URLSearchParams(location.search).get('edition');
     const fromRoot = byId('editorRoot')?.dataset?.edition;
     const fromHtml = document.documentElement?.getAttribute('data-edition');
@@ -325,8 +329,16 @@
     }
     if (!resp.ok) return { rootJobsCount: 0, folders: [] };
     const j = await resp.json().catch(() => null);
-    if (!j || String(j.status).toUpperCase() !== 'OK') return { rootJobsCount: 0, folders: [] };
-    const rawList = j.folders || j.transcriptFolderDtos || j.transcriptFolders || j.folderDtos || [];
+    if (!j || String(j.status).toUpperCase() !== 'OK') return { rootJobsCount: 0, folders: [], total: 0 };
+    return countsFromFolderApi(j);
+  }
+
+  function countsFromFolderApi(payload) {
+    const body = payload || {};
+    const rootRaw = body.rootJobsCount != null ? body.rootJobsCount : body.rootCount;
+    let rootJobsCount = Number(rootRaw);
+    if (!Number.isFinite(rootJobsCount) || rootJobsCount < 0) rootJobsCount = 0;
+    const rawList = body.folders || body.transcriptFolderDtos || body.transcriptFolders || body.folderDtos || [];
     const folders = (Array.isArray(rawList) ? rawList : [])
       .map((f) => ({
         folderId: Number(f.folderId != null ? f.folderId : f.id) || 0,
@@ -334,8 +346,8 @@
         jobsCount: folderDtoJobsCount(f)
       }))
       .filter((f) => f.folderId > 0 && f.folderName);
-    const rootJobsCount = Number(j.rootJobsCount != null ? j.rootJobsCount : j.rootCount) || 0;
-    return { rootJobsCount, folders };
+    const total = rootJobsCount + folders.reduce((sum, folder) => sum + (Number(folder.jobsCount) || 0), 0);
+    return { rootJobsCount, folders, total };
   }
 
   function mapJobsInfoDtos(j) {
@@ -381,22 +393,20 @@
 
   function mergeFoldersCacheWithDerived(cache, derived) {
     const apiRoot = Number(cache?.rootJobsCount) || 0;
-    const mergedRoot = Math.max(apiRoot, derived.rootJobsCount);
-    const doLog = window.AGILO_DEBUG;
-    if (doLog && mergedRoot > apiRoot) {
-      console.debug('[NavFolders] rootJobsCount API', apiRoot, 'dérivé', derived.rootJobsCount, '→', mergedRoot);
+    const derivedRoot = Number(derived?.rootJobsCount) || 0;
+    if (window.AGILO_DEBUG && derivedRoot > apiRoot) {
+      console.debug('[NavFolders] rootJobsCount API', apiRoot, 'dérivé', derivedRoot, 'on garde l’API');
     }
     const folders = (Array.isArray(cache?.folders) ? cache.folders : []).map((f) => {
       const fid = Number(f.folderId);
       const api = Number(f.jobsCount) || 0;
       const d = Number.isFinite(fid) && fid > 0 ? derived.byFolder.get(fid) || 0 : 0;
-      const m = Math.max(api, d);
-      if (doLog && m > api) {
-        console.debug('[NavFolders] dossier', f.folderName, fid, 'API', api, 'dérivé', d, '→', m);
+      if (window.AGILO_DEBUG && d > api) {
+        console.debug('[NavFolders] dossier', f.folderName, fid, 'API', api, 'dérivé', d, 'on garde l’API');
       }
-      return { ...f, jobsCount: m };
+      return { ...f, jobsCount: api };
     });
-    return { rootJobsCount: mergedRoot, folders };
+    return { rootJobsCount: apiRoot, folders };
   }
 
   const ACCENT_ALL =
@@ -962,6 +972,9 @@
     }
 
     const rootCount = merged.rootJobsCount;
+    const badgeTotal = rootCount + (Array.isArray(merged.folders) ? merged.folders.reduce((sum, folder) => sum + (Number(folder.jobsCount) || 0), 0) : 0);
+    const readyCountEl = document.getElementById('readyCount');
+    if (readyCountEl) readyCountEl.textContent = String(badgeTotal);
     if (shouldShowAllRow()) {
       addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, ACCENT_ALL);
     }
@@ -1028,7 +1041,7 @@
       const [foldersData, jobsRows] = await Promise.all([fetchTranscriptFoldersList(auth), fetchJobsInfoAll(auth)]);
       const derived = deriveFolderCountsFromJobs(jobsRows);
       const merged = mergeFoldersCacheWithDerived(foldersData, derived);
-      const totalAll = Array.isArray(jobsRows) ? jobsRows.length : 0;
+      const totalAll = Number(foldersData.total) || 0;
 
       renderMerged(auth, merged, totalAll, derived);
       clearRetry();
