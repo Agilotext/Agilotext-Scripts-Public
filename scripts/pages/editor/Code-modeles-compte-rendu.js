@@ -116,7 +116,8 @@
   }
 
   function setJobPromptIdLocal(jobId, promptId) {
-    if (!jobId || !promptId) return;
+    const n = Number(promptId);
+    if (!jobId || isNaN(n) || n < 0) return;
     try {
       const storage = localStorage.getItem('agilo:job-prompt-ids');
       const data = storage ? JSON.parse(storage) : {};
@@ -278,11 +279,48 @@
     return all.find(function (x) { return Number(x.promptModelId) === n; }) || null;
   }
 
+  /* @export-start summary-model-choice */
   function normalizePromptId(raw) {
-    if (raw == null || raw === -1 || raw === '-1') return null;
+    if (raw == null || raw === '' || raw === -1 || raw === '-1') return null;
     const n = Number(raw);
-    return isNaN(n) || n === -1 ? null : n;
+    return isNaN(n) || n < 0 ? null : n;
   }
+
+  function summaryModelChoice(opts) {
+    const o = opts || {};
+    const jobId = String(o.jobId || '');
+    const pending = o.pending;
+    if (pending && String(pending.jobId) === jobId) {
+      const pendingId = normalizePromptId(pending.id);
+      if (pendingId != null) {
+        return {
+          jobId: jobId,
+          id: pendingId,
+          name: pending.name || '',
+          source: 'pending'
+        };
+      }
+    }
+    let id = normalizePromptId(o.jobPromptId);
+    if (id == null) id = normalizePromptId(o.defaultId);
+    return { jobId: jobId, id: id, name: '', source: 'job' };
+  }
+
+  function promptIdSuffix(id) {
+    const n = normalizePromptId(id);
+    if (n == null) return '';
+    return '&promptId=' + encodeURIComponent(String(n));
+  }
+  /* @export-end summary-model-choice */
+
+  window.agiloSummaryModelChoice = summaryModelChoice;
+  window.agiloPromptIdSuffix = promptIdSuffix;
+  window.agiloClearPendingSummaryChoice = function (jobId) {
+    const pending = window.__agiloPendingSummaryChoice;
+    if (!pending) return;
+    if (jobId != null && jobId !== '' && String(pending.jobId) !== String(jobId)) return;
+    window.__agiloPendingSummaryChoice = null;
+  };
 
   function isSummaryEmpty() {
     if (typeof window.agiloIsSummaryEmpty === 'function') {
@@ -299,17 +337,19 @@
   }
 
   function modelStateForJob(pack, jobId, jobPromptId) {
-    let id = normalizePromptId(jobPromptId);
-    const live = window.__agiloCurrentSummaryModel;
-    const sameJob = live && String(live.jobId) === String(jobId);
-    if (id == null && isSummaryEmpty() && sameJob && live.id != null) {
-      id = normalizePromptId(live.id);
-    }
-    if (id == null) id = normalizePromptId(pack && pack.defaultId);
+    const choice = summaryModelChoice({
+      pending: window.__agiloPendingSummaryChoice,
+      jobId: jobId,
+      jobPromptId: jobPromptId,
+      defaultId: pack && pack.defaultId
+    });
+    const name = choice.source === 'pending' && choice.name
+      ? choice.name
+      : nameForPromptId(pack, choice.id);
     return {
-      jobId: String(jobId || ''),
-      id: id,
-      name: nameForPromptId(pack, id)
+      jobId: choice.jobId,
+      id: choice.id,
+      name: name
     };
   }
 
@@ -464,7 +504,12 @@
     const jobId = pickJobId();
     const name = model.promptModelName || ('Modèle ' + model.promptModelId);
     const promptId = Number(model.promptModelId);
-    if (jobId && promptId > 0) {
+    window.__agiloPendingSummaryChoice = {
+      jobId: String(jobId || ''),
+      id: promptId,
+      name: name
+    };
+    if (jobId && !isNaN(promptId) && promptId >= 0) {
       setJobPromptIdLocal(jobId, promptId);
       try {
         sessionStorage.setItem('agilo:summaryPromptId:' + jobId, String(promptId));
@@ -726,14 +771,12 @@
 
   window.agiloResolveSummaryModel = async function (jobId) {
     const pack = cachedModels || await loadAllModels(false);
-    const live = window.__agiloCurrentSummaryModel;
-    if (live && String(live.jobId) === String(jobId) && live.id != null) {
-      if (!live.name) live.name = nameForPromptId(pack, live.id);
-      renderCurrentModelBanners(live);
-      return live;
-    }
+    const pending = window.__agiloPendingSummaryChoice;
+    const pendingActive = pending
+      && String(pending.jobId) === String(jobId)
+      && normalizePromptId(pending.id) != null;
     let id = null;
-    if (jobId) {
+    if (!pendingActive && jobId) {
       id = await getJobPromptIdFromAPI(jobId, false);
       if (id == null) id = getJobPromptIdLocal(jobId);
     }
@@ -1219,6 +1262,7 @@
         lastJobId = cur;
         isPopulated = false;
         cachedModels = null;
+        window.__agiloPendingSummaryChoice = null;
         window.__agiloCurrentSummaryModel = { jobId: cur, id: null, name: null };
         if (typeof window.agiloResolveSummaryModel === 'function') {
           window.agiloResolveSummaryModel(cur).catch(function () {});

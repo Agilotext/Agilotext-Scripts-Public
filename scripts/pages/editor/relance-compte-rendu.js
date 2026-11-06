@@ -1217,7 +1217,7 @@
       const ss = sessionStorage.getItem('agilo:summaryPromptId:' + jobId);
       if (ss && ss !== 'null') {
         const n = Number(ss);
-        if (!isNaN(n) && n > 0) return n;
+        if (!isNaN(n) && n >= 0) return n;
       }
     } catch (_) {}
     try {
@@ -1225,10 +1225,56 @@
       if (raw) {
         const data = JSON.parse(raw);
         const n = Number(data[jobId]);
-        if (!isNaN(n) && n > 0) return n;
+        if (!isNaN(n) && n >= 0) return n;
       }
     } catch (_) {}
     return null;
+  }
+
+  function clearPendingSummaryChoice(jobId) {
+    if (typeof window.agiloClearPendingSummaryChoice === 'function') {
+      window.agiloClearPendingSummaryChoice(jobId);
+      return;
+    }
+    const pending = window.__agiloPendingSummaryChoice;
+    if (!pending) return;
+    if (jobId != null && jobId !== '' && String(pending.jobId) !== String(jobId)) return;
+    window.__agiloPendingSummaryChoice = null;
+  }
+
+  function choiceForRegen(jobId, resolved, cachedPromptId) {
+    if (typeof window.agiloSummaryModelChoice === 'function') {
+      const pending = window.__agiloPendingSummaryChoice;
+      const picked = window.agiloSummaryModelChoice({
+        pending: pending,
+        jobId: jobId,
+        jobPromptId: resolved && resolved.id != null ? resolved.id : cachedPromptId,
+        defaultId: null
+      });
+      const pendingName = pending && String(pending.jobId) === String(jobId) ? pending.name : '';
+      const name = picked.source === 'pending'
+        ? (pendingName || (resolved && resolved.name) || '')
+        : ((resolved && resolved.name) || '');
+      return { id: picked.id, name: name };
+    }
+    const pending = window.__agiloPendingSummaryChoice;
+    if (pending && String(pending.jobId) === String(jobId)) {
+      const n = Number(pending.id);
+      if (!isNaN(n) && n >= 0) return { id: n, name: pending.name || '' };
+    }
+    if (resolved && resolved.id != null && !isNaN(Number(resolved.id)) && Number(resolved.id) >= 0) {
+      return { id: Number(resolved.id), name: resolved.name || '' };
+    }
+    if (cachedPromptId != null && !isNaN(Number(cachedPromptId)) && Number(cachedPromptId) >= 0) {
+      return { id: Number(cachedPromptId), name: '' };
+    }
+    return { id: null, name: '' };
+  }
+
+  function promptSuffixFor(id) {
+    if (typeof window.agiloPromptIdSuffix === 'function') return window.agiloPromptIdSuffix(id);
+    if (id == null || id === '' || isNaN(Number(id)) || Number(id) < 0) return '';
+    return '&promptId=' + encodeURIComponent(String(Number(id)));
   }
 
   function isPvPrompt(id) {
@@ -1274,12 +1320,14 @@
     );
     if (!confirmed) {
       isGenerating = false;
+      clearPendingSummaryChoice(creds.jobId);
       updateButtonVisibility();
       return;
     }
     const api = await loadFormatInvestigationPvHelper();
     if (!api) {
       isGenerating = false;
+      clearPendingSummaryChoice(creds.jobId);
       alert('Téléchargement indisponible. Rechargez la page.');
       updateButtonVisibility();
       return;
@@ -1295,6 +1343,7 @@
       templateId: String(promptId)
     });
     isGenerating = false;
+    clearPendingSummaryChoice(creds.jobId);
     if (!r.ok && !r.busy) {
       const msg = r.errorMessage || 'Impossible de préparer le Word.';
       if (typeof window.toast === 'function') window.toast(msg);
@@ -1335,9 +1384,22 @@
       updateButtonVisibility();
       return;
     }
-    const pvPromptId = _getCachedPromptId(jobId);
-    if (isPvPrompt(pvPromptId)) {
-      await generateInvestigationPv({ email, token, edition, jobId }, pvPromptId);
+    const cachedPromptId = _getCachedPromptId(jobId);
+    let resolved = null;
+    if (typeof window.agiloResolveSummaryModel === 'function') {
+      try {
+        resolved = await window.agiloResolveSummaryModel(jobId);
+      } catch (e) {
+        log('agiloResolveSummaryModel', e);
+      }
+    }
+    if (!resolved) {
+      const live = window.__agiloCurrentSummaryModel;
+      if (live && String(live.jobId) === String(jobId)) resolved = live;
+    }
+    const choice = choiceForRegen(jobId, resolved, cachedPromptId);
+    if (isPvPrompt(choice.id)) {
+      await generateInvestigationPv({ email, token, edition, jobId }, choice.id);
       return;
     }
     
@@ -1362,26 +1424,11 @@
       }
     }
 
-    const cachedPromptId = _getCachedPromptId(jobId);
-    let resolved = null;
-    if (typeof window.agiloResolveSummaryModel === 'function') {
-      try {
-        resolved = await window.agiloResolveSummaryModel(jobId);
-      } catch (e) {
-        log('agiloResolveSummaryModel', e);
-      }
-    }
-    if (!resolved) {
-      const live = window.__agiloCurrentSummaryModel;
-      if (live && String(live.jobId) === String(jobId)) resolved = live;
-    }
-    let promptIdToUse = null;
-    if (resolved && resolved.id != null) promptIdToUse = resolved.id;
-    else if (!resolved) promptIdToUse = cachedPromptId;
-    const modelName = (resolved && resolved.name) || '';
+    const promptIdToUse = choice.id;
+    const modelName = choice.name || '';
     const modelNote = modelName
       ? ('Modèle : ' + modelName)
-      : (promptIdToUse
+      : (promptIdToUse != null
         ? 'Modèle de ce compte-rendu.'
         : 'Modèle par défaut de votre compte.');
 
@@ -1404,6 +1451,7 @@
 
     if (!confirmed) {
       isGenerating = false;
+      clearPendingSummaryChoice(jobId);
       updateButtonVisibility();
       return;
     }
@@ -1421,11 +1469,11 @@
       if (skipRegenCharge) {
         log('Relance incident : quota de régénération non décompté');
       }
-      const promptSuffix = promptIdToUse ? `&promptId=${encodeURIComponent(promptIdToUse)}` : '';
+      const promptSuffix = promptSuffixFor(promptIdToUse);
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}${promptSuffix}`;
       log(
         'Appel redoSummary' +
-          (promptIdToUse ? ` (promptId=${promptIdToUse})` : ' (modèle défaut compte)') +
+          (promptIdToUse != null ? ` (promptId=${promptIdToUse})` : ' (modèle défaut compte)') +
           '...'
       );
       const response = await fetchRedoSummaryWithRetry(url, 3);
@@ -1492,6 +1540,7 @@
                 hideSummaryLoading();
                 await applyRegenCharge(false);
                 isGenerating = false;
+                clearPendingSummaryChoice(jobId);
                 updateButtonVisibility();
                 emitSummaryReady(jobId);
                 return;
@@ -1505,6 +1554,7 @@
                 await applyRegenCharge(true);
                 showSuccessMessage('Compte-rendu prêt');
                 isGenerating = false;
+                clearPendingSummaryChoice(jobId);
                 updateButtonVisibility();
                 emitSummaryReady(jobId);
                 return;
@@ -1532,6 +1582,7 @@
                 );
               }
               isGenerating = false;
+              clearPendingSummaryChoice(jobId);
               updateButtonVisibility();
               emitSummaryReady(jobId);
             })
@@ -1541,6 +1592,7 @@
               hideSummaryLoading();
               try { await applyRegenCharge(false); } catch (e2) {}
               isGenerating = false;
+              clearPendingSummaryChoice(jobId);
               showSummaryStalledToast(
                 jobId,
                 'impossible de vérifier le statut. Actualisez la page ou contactez le support (job ' + jobId + ').'
@@ -1550,6 +1602,7 @@
             });
         } else {
           isGenerating = false;
+          clearPendingSummaryChoice(jobId);
           updateButtonVisibility();
         }
       } else if (result.status === 'KO') {
@@ -1558,12 +1611,14 @@
         updateButtonVisibility();
       } else {
         isGenerating = false;
+        clearPendingSummaryChoice(jobId);
         logError('Erreur redoSummary', result);
         alert('❌ Erreur: ' + formatRedoSummaryApiError(result).alertText);
         updateButtonVisibility();
       }
     } catch (err) {
       isGenerating = false;
+      clearPendingSummaryChoice(jobId);
       logError('Erreur réseau', err);
       alert('❌ Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
       updateButtonVisibility();
@@ -1579,6 +1634,7 @@
       log('Changement de jobId détecté:', lastJobId, '→', currentJobId);
       lastJobId = currentJobId;
       isGenerating = false;
+      clearPendingSummaryChoice(null);
       try {
         const creds = await ensureCreds();
         if (creds.jobId && creds.edition) {
