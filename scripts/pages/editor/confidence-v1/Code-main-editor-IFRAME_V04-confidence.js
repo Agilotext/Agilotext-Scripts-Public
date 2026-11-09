@@ -4658,7 +4658,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.33-correction-after-save';
+  window.__agiloEditorConfidenceVersion = '1.09.34-correction-copy';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
@@ -5357,13 +5357,13 @@
     const panel = correctionOpenShell(
       'agilo-correction-intro-title',
       'Corriger la transcription',
-      'Ce bouton enlève un mot dit deux fois de suite par erreur, et il corrige la ponctuation. Un nom ou un prénom dans la phrase ne change pas. Les intervenants à gauche et l’audio non plus.'
+      'Ce bouton corrige l’orthographe, les accords et la ponctuation. Il retire un mot seulement s’il est écrit deux fois de suite, le même. Un nom dans la phrase ne change pas. Les intervenants à gauche et l’audio non plus.'
     );
     const box = document.createElement('div');
     box.className = 'aq-modal__analogy-box';
     const fact = document.createElement('p');
     fact.className = 'aq-modal__fact-line';
-    fact.textContent = '« le le budget » devient « le budget ». « oui oui » reste, c’est une insistance. Un chiffre et une heure aussi.';
+    fact.textContent = '« le le budget » devient « le budget ». « oui oui » reste, c’est une insistance. Un chiffre et une heure aussi. Une virgule entre les deux mots, ou « je pense je pense », reste.';
     box.append(fact);
     panel.append(box);
     correctionAddLine(panel, correctionIdleHint(correctionAudioMinutes()));
