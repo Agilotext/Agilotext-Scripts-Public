@@ -1,11 +1,11 @@
-// Agilotext - Ready Count v2.2.0-fullclient (limit=2000, vrai compteur)
+// Agilotext - Ready Count v2.3.0 (transcriptCount, la sidebar possède le badge)
 // Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
 // Ne jamais écrire localStorage agilo:edition (clé partagée produit vs API transcription).
 
 (function () {
   'use strict';
 
-  window.__agiloReadyCountVersion = '2.2.0-fullclient';
+  window.__agiloReadyCountVersion = '2.3.0';
 
   let checkTokenInterval = null;
 
@@ -59,6 +59,25 @@
     return t || null;
   }
 
+  function sidebarOwnsBadge() {
+    return !!document.getElementById('agilo-nav-folders-root');
+  }
+
+  function folderRowCount(folder) {
+    const raw =
+      folder.transcriptCount != null ? folder.transcriptCount :
+      folder.jobsCount != null ? folder.jobsCount :
+      folder.count != null ? folder.count :
+      folder.jobCount != null ? folder.jobCount :
+      folder.nbJobs != null ? folder.nbJobs :
+      folder.totalJobs != null ? folder.totalJobs :
+      folder.jobs_count != null ? folder.jobs_count :
+      folder.numJobs != null ? folder.numJobs :
+      folder.numberOfJobs;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
   function countsFromFolderApi(payload) {
     const body = payload || {};
     const rootRaw = body.rootJobsCount != null ? body.rootJobsCount : body.rootCount;
@@ -70,13 +89,65 @@
       const folderId = Number(folder.folderId != null ? folder.folderId : folder.id) || 0;
       const folderName = String(folder.folderName != null ? folder.folderName : folder.name || '').trim();
       if (folderId <= 0 || !folderName) return;
-      const jobsCount = Number(folder.jobsCount != null ? folder.jobsCount : folder.count);
-      if (Number.isFinite(jobsCount) && jobsCount > 0) folderSum += jobsCount;
+      folderSum += folderRowCount(folder);
     });
     return rootJobsCount + folderSum;
   }
 
+  function fetchJson(url) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    return fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    }).then((response) => {
+      clearTimeout(timeout);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }).catch((error) => {
+      clearTimeout(timeout);
+      throw error;
+    });
+  }
+
+  function jobsUrl(userEmail, token, edition, offset) {
+    return (
+      'https://api.agilotext.com/api/v1/getJobsInfo?username=' +
+      encodeURIComponent(userEmail) +
+      '&token=' +
+      encodeURIComponent(token) +
+      '&edition=' +
+      encodeURIComponent(edition) +
+      '&limit=200&offset=' +
+      offset
+    );
+  }
+
+  async function fetchJobsTotal(userEmail, token, edition) {
+    let offset = 0;
+    let counted = 0;
+    while (offset < 2000) {
+      const data = await fetchJson(jobsUrl(userEmail, token, edition, offset));
+      if (String(data.status || '').toUpperCase() !== 'OK') break;
+      const total = Number(data.totalCount);
+      if (Number.isFinite(total) && total >= 0) return total;
+      const batch = Array.isArray(data.jobsInfoDtos) ? data.jobsInfoDtos.length : 0;
+      counted += batch;
+      if (batch < 200) break;
+      offset += 200;
+    }
+    return counted;
+  }
+
+  function writeReadyCount(value) {
+    if (sidebarOwnsBadge()) return;
+    const countEl = document.getElementById('readyCount');
+    if (countEl) countEl.textContent = String(value);
+  }
+
   function fetchAndUpdateReadyCount(token, editionOverride) {
+    if (sidebarOwnsBadge()) return;
     const userEmail = getUserEmail();
     if (!userEmail || !token) {
       if (window.AGILO_DEBUG) console.error('[ready-count] Email ou token indisponible');
@@ -84,8 +155,7 @@
     }
 
     const edition = pickEdition(editionOverride);
-
-    const url =
+    const foldersUrl =
       'https://api.agilotext.com/api/v1/getTranscriptFolders?username=' +
       encodeURIComponent(userEmail) +
       '&token=' +
@@ -93,31 +163,22 @@
       '&edition=' +
       encodeURIComponent(edition);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    })
-      .then((response) => {
-        clearTimeout(timeout);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((data) => {
-        if (String(data.status || '').toUpperCase() === 'OK') {
-          const countEl = document.getElementById('readyCount');
-          if (countEl) countEl.textContent = String(countsFromFolderApi(data));
-        } else {
-          if (window.AGILO_DEBUG) console.error('[ready-count] API:', data.errorMessage);
-        }
+    Promise.all([
+      fetchJson(foldersUrl).catch(() => null),
+      fetchJobsTotal(userEmail, token, edition).catch(() => null),
+    ])
+      .then((result) => {
+        const folders = result[0];
+        const foldersOk = !!(folders && String(folders.status || '').toUpperCase() === 'OK');
+        const jobTotal = Number.isFinite(Number(result[1])) ? Number(result[1]) : null;
+        if (sidebarOwnsBadge()) return;
+        if (!foldersOk && jobTotal == null) return;
+        const apiTotal = foldersOk ? countsFromFolderApi(folders) : 0;
+        writeReadyCount(Math.max(apiTotal, jobTotal == null ? 0 : jobTotal));
       })
       .catch((error) => {
-        clearTimeout(timeout);
-        if (error.name !== 'AbortError' && window.AGILO_DEBUG) {
-          console.error('[ready-count] getJobsInfo:', error);
+        if (error && error.name !== 'AbortError' && window.AGILO_DEBUG) {
+          console.error('[ready-count]', error);
         }
       });
   }

@@ -23,7 +23,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.17', refresh: function () {} },
+      { version: '1.7.18', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -36,7 +36,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.17';
+  const APP_VERSION = '1.7.18';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -212,6 +212,7 @@
 
   function folderDtoJobsCount(f) {
     const v =
+      f.transcriptCount ??
       f.jobsCount ??
       f.count ??
       f.jobCount ??
@@ -357,25 +358,47 @@
     }));
   }
 
-  async function fetchJobsInfoAll(auth, retried = false) {
-    const url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=200&offset=0`;
+  const JOBS_PAGE = 200;
+  const JOBS_MAX = 2000;
+
+  async function fetchJobsInfoPage(auth, offset, retried = false) {
+    const url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=${JOBS_PAGE}&offset=${offset}`;
     let resp;
     try {
       resp = await fetch(url, { credentials: 'omit', cache: 'no-store' });
     } catch (e) {
       dbg('getJobsInfo network', e);
-      return [];
+      return { jobs: [], totalCount: null, auth, failed: true };
     }
     if ((resp.status === 401 || resp.status === 403) && !retried && auth.username && typeof window.getToken === 'function') {
       try {
         window.getToken(auth.username, auth.edition);
       } catch {}
       const a2 = await ensureAuth(8000);
-      if (a2.token) return fetchJobsInfoAll(a2, true);
+      if (a2.token) return fetchJobsInfoPage(a2, offset, true);
     }
-    if (!resp.ok) return [];
+    if (!resp.ok) return { jobs: [], totalCount: null, auth, failed: true };
     const j = await resp.json().catch(() => null);
-    return mapJobsInfoDtos(j);
+    const totalRaw = j && j.totalCount != null ? Number(j.totalCount) : null;
+    const totalCount = Number.isFinite(totalRaw) && totalRaw >= 0 ? totalRaw : null;
+    return { jobs: mapJobsInfoDtos(j), totalCount, auth, failed: false };
+  }
+
+  async function fetchJobsInfoAll(auth) {
+    const rows = [];
+    let current = auth;
+    let offset = 0;
+    while (offset < JOBS_MAX) {
+      const page = await fetchJobsInfoPage(current, offset, false);
+      current = page.auth || current;
+      if (page.failed) break;
+      if (Array.isArray(page.jobs) && page.jobs.length) rows.push.apply(rows, page.jobs);
+      const got = Array.isArray(page.jobs) ? page.jobs.length : 0;
+      offset += JOBS_PAGE;
+      if (got < JOBS_PAGE) break;
+      if (page.totalCount != null && offset >= page.totalCount) break;
+    }
+    return rows;
   }
 
   function deriveFolderCountsFromJobs(jobs) {
@@ -394,19 +417,18 @@
   function mergeFoldersCacheWithDerived(cache, derived) {
     const apiRoot = Number(cache?.rootJobsCount) || 0;
     const derivedRoot = Number(derived?.rootJobsCount) || 0;
-    if (window.AGILO_DEBUG && derivedRoot > apiRoot) {
-      console.debug('[NavFolders] rootJobsCount API', apiRoot, 'dérivé', derivedRoot, 'on garde l’API');
-    }
+    const byFolder = derived && derived.byFolder ? derived.byFolder : new Map();
+    const rootJobsCount = Math.max(apiRoot, derivedRoot);
     const folders = (Array.isArray(cache?.folders) ? cache.folders : []).map((f) => {
       const fid = Number(f.folderId);
       const api = Number(f.jobsCount) || 0;
-      const d = Number.isFinite(fid) && fid > 0 ? derived.byFolder.get(fid) || 0 : 0;
-      if (window.AGILO_DEBUG && d > api) {
-        console.debug('[NavFolders] dossier', f.folderName, fid, 'API', api, 'dérivé', d, 'on garde l’API');
-      }
-      return { ...f, jobsCount: api };
+      const d = Number.isFinite(fid) && fid > 0 ? byFolder.get(fid) || 0 : 0;
+      return { ...f, jobsCount: Math.max(api, d) };
     });
-    return { rootJobsCount: apiRoot, folders };
+    if (window.AGILO_DEBUG && derivedRoot > apiRoot) {
+      console.debug('[NavFolders] racine API', apiRoot, 'dérivé', derivedRoot, 'affiché', rootJobsCount);
+    }
+    return { rootJobsCount, folders };
   }
 
   const ACCENT_ALL =
@@ -797,6 +819,13 @@
   }
 
   function renderLoading() {
+    const hasRows = mount.querySelector('.agilo-nav-folders__row');
+    if (hasRows) {
+      const label = mount.querySelector('.agilo-nav-folders__summary-text');
+      if (label) label.textContent = 'Chargement';
+      mount.removeAttribute('hidden');
+      return;
+    }
     mount.innerHTML = '';
     mount.removeAttribute('hidden');
     const details = document.createElement('details');
@@ -1041,7 +1070,11 @@
       const [foldersData, jobsRows] = await Promise.all([fetchTranscriptFoldersList(auth), fetchJobsInfoAll(auth)]);
       const derived = deriveFolderCountsFromJobs(jobsRows);
       const merged = mergeFoldersCacheWithDerived(foldersData, derived);
-      const totalAll = Number(foldersData.total) || 0;
+      const folderSum = (Array.isArray(merged.folders) ? merged.folders : []).reduce(
+        (sum, folder) => sum + (Number(folder.jobsCount) || 0),
+        0
+      );
+      const totalAll = (Number(merged.rootJobsCount) || 0) + folderSum;
 
       renderMerged(auth, merged, totalAll, derived);
       clearRetry();

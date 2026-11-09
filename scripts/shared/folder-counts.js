@@ -12,6 +12,7 @@
 
   function folderJobsCount(folder) {
     var raw =
+      folder.transcriptCount != null ? folder.transcriptCount :
       folder.jobsCount != null ? folder.jobsCount :
       folder.count != null ? folder.count :
       folder.jobCount != null ? folder.jobCount :
