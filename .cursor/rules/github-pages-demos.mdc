@@ -1,0 +1,12 @@
+---
+description: GitHub Pages Agilotext ne publie que la branche des démos homepage. Ne pas changer cette source.
+alwaysApply: true
+---
+
+Si la tâche n'est pas GitHub Pages, github.io, une iframe de démo ou la homepage Agilotext : ignorer.
+
+Pages du dépôt `Agilotext/Agilotext-Scripts-Public` ne publie que la branche `pages/homepage-demos`, dossier `/docs`.
+
+- On ne change pas cette source. Une branche `codex/*` ne le devient jamais.
+- On n'efface pas `capture.html`, `result.html`, `demo.mp3`.
+- Une nouvelle démo s'ajoute à côté. On ne remplace pas le dossier `docs/webflow-embeds/homepage-mini-demo/`.
