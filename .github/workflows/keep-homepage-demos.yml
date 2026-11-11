@@ -1,0 +1,17 @@
+name: keep-homepage-demos
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  demos:
+    name: demos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Les trois fichiers de la homepage sont là
+        run: |
+          test -f docs/webflow-embeds/homepage-mini-demo/capture.html
+          test -f docs/webflow-embeds/homepage-mini-demo/result.html
+          test -f docs/webflow-embeds/homepage-mini-demo/demo.mp3
