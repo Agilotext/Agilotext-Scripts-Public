@@ -1,6 +1,9 @@
 /**
- * Première connexion Premium / Business : thème WordBoost « Mes mots »
- * si le compte n'a encore aucun thème. Pas de toast. Pas de Free.
+ * Première connexion Premium / Business : thème « Mes mots »
+ * si le compte n'a encore aucun thème, et seulement avec le prénom et le nom.
+ * Ne jamais ajouter Agilotext : le backend entoure ce mot de crochets
+ * et l'envoi audio peut tomber. Pas de toast. Pas de Free.
+ * Liste vide : ne rien créer.
  */
 (function (root, factory) {
   "use strict";
@@ -40,12 +43,9 @@
   }
 
   function buildSeedWords(firstName, lastName) {
-    var words = sanitizeWordList([firstName, lastName, "Agilotext"]);
-    var hasBrand = words.some(function (word) {
-      return word.toLocaleLowerCase("fr") === "agilotext";
+    return sanitizeWordList([firstName, lastName]).filter(function (word) {
+      return word.toLocaleLowerCase("fr") !== "agilotext";
     });
-    if (!hasBrand) words.push("Agilotext");
-    return words;
   }
 
   function parseCatalog(payload) {
@@ -157,6 +157,11 @@
             return;
           }
           var words = buildSeedWords(names.firstName, names.lastName);
+          if (!words.length) {
+            storage.setItem(MARKER_KEY, names.id);
+            releaseLock(storage);
+            return;
+          }
           return post(win, "setWordBoost2", {
             username: email,
             token: token,

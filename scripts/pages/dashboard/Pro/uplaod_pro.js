@@ -185,6 +185,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
     }
     if (!text) return defaultErrorHtml;
+    if (/java\.lang|illegalargumentexception|invalid to-word/i.test(text)) {
+      return '<strong>Envoi impossible pour le moment</strong><br>Le fichier n’a pas pu partir.<br>Réessayez dans quelques minutes.<br>Si le message revient, écrivez-nous à contact@agilotext.com.';
+    }
     return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
   };
   const showDefaultError = () => { resetDefaultErrorMessage(); showError('default'); };

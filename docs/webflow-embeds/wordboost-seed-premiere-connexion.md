@@ -1,6 +1,8 @@
 # Semis WordBoost, première connexion
 
-Un thème `Mes mots` (prénom, nom, Agilotext) est créé une seule fois, seulement si le compte n’a encore aucun thème. Ce n’est pas la tâche Nicolas « Agilotext forcé sur tous les comptes », ni le décalage extension / application / streaming.
+Un thème `Mes mots` (prénom et nom seulement) est créé une seule fois, seulement si le compte n’a encore aucun thème et si au moins un de ces deux mots est lisible. `Agilotext` n’est plus semé : le backend entoure ce mot de crochets et l’envoi peut tomber. Ce n’est pas la tâche Nicolas « Agilotext forcé sur tous les comptes ».
+
+Le script encore publié sur www et sur le staging pointe le pin `9fb6630c`, qui sème encore `Agilotext`. Le retirer des pieds de page Premium (`6815bee5a9c0b57da183550e`) et Business (`6815bee5a9c0b57da183557c`). Publication www seulement avec un OK qui nomme ces deux pages. Pas de push du dépôt public sans OK.
 
 ## Pages
 
@@ -23,14 +25,15 @@ Pas de collage du fichier. Pas dans le head du site. Staging d’abord. www et l
 ## Comportement
 
 - Édition `pro` sur Premium, `ent` sur Business. Un CSE seul est déjà sur Business.
-- `getWordBoostInfo2` vide : `setWordBoost2` avec `boostId` 0, puis `setWordBoostDefault2`.
+- `getWordBoostInfo2` vide et au moins un mot (prénom ou nom) : `setWordBoost2` avec `boostId` 0, puis `setWordBoostDefault2`.
+- Prénom et nom vides : rien. Pas de thème, pas d’appel.
 - Liste déjà remplie : rien. On n’ajoute pas Agilotext dans un thème existant.
 - Verrou `localStorage` `wb-seed-lock` pendant l’appel, marqueur `wb-seed-v1` après succès.
 - Pas de toast. Erreur API : silence, la page continue.
 
 ## Recette staging
 
-1. Compte Premium sans thème : `Mes mots` devient le défaut, mots = prénom, nom, Agilotext.
+1. Compte Premium sans thème, avec prénom ou nom : `Mes mots` devient le défaut, mots = prénom et nom, sans Agilotext. Sans prénom ni nom : aucun thème.
 2. Rechargement : pas de second thème.
 3. Compte qui a déjà un thème : aucun nouveau thème.
 4. Business : même chose.

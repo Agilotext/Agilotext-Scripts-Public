@@ -87,6 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const input = wrap.querySelector('.agilo-multi-upload-input, input[type="checkbox"]');
     const isMultiPage = /\/multi-file-upload\/?$/.test(window.location.pathname || '');
 
+    function singleUploadUrl() {
+      return String(multiUploadUrl || '').replace(/\/multi-file-upload\/?$/, '');
+    }
+
     function setToggleState(checked) {
       if (input) input.checked = !!checked;
       if (toggle) toggle.classList.toggle('w--redirected-checked', !!checked);
@@ -107,12 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
         event.stopPropagation();
       }
       if (isMultiPage) {
-        setToggleState(true);
+        const back = singleUploadUrl();
+        if (back) window.location.href = back;
         return;
       }
       if (edition === 'free') {
         wrap.classList.add('is-disabled');
-        setToggleState(false);
+        setToggleState(true);
         showFreeUpgradeMessage();
         return;
       }
@@ -127,10 +132,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wrap.setAttribute('role', 'button');
     wrap.setAttribute('tabindex', '0');
-    wrap.setAttribute('aria-label', 'Activer l’envoi multiple');
-    if (link) link.setAttribute('href', multiUploadUrl || '#');
+    wrap.setAttribute('aria-label', isMultiPage
+      ? 'Envoi multiple sélectionné. Revenir à l’envoi unique.'
+      : 'Envoi unique sélectionné.');
+    if (link) link.setAttribute('href', (isMultiPage ? singleUploadUrl() : multiUploadUrl) || '#');
 
-    setToggleState(isMultiPage);
+    setToggleState(!isMultiPage);
     wrap.classList.toggle('is-disabled', edition === 'free');
 
     wrap.addEventListener('click', handleActivate);
@@ -277,6 +284,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
     }
     if (!text) return defaultErrorHtml;
+    if (/java\.lang|illegalargumentexception|invalid to-word/i.test(text)) {
+      return '<strong>Envoi impossible pour le moment</strong><br>Le fichier n’a pas pu partir.<br>Réessayez dans quelques minutes.<br>Si le message revient, écrivez-nous à contact@agilotext.com.';
+    }
     return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
   };
   const showDefaultError = () => {

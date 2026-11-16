@@ -2,20 +2,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const seed = require("../scripts/pages/dashboard/agilo-wb-seed.js");
 
-test("Mes mots contient prénom, nom et Agilotext", () => {
-  assert.deepEqual(seed.buildSeedWords("Camille", "Boyer"), ["Camille", "Boyer", "Agilotext"]);
+test("Mes mots contient le prénom et le nom, pas Agilotext", () => {
+  assert.deepEqual(seed.buildSeedWords("Camille", "Boyer"), ["Camille", "Boyer"]);
 });
 
-test("sans prénom, Agilotext reste", () => {
-  assert.deepEqual(seed.buildSeedWords("", "  "), ["Agilotext"]);
+test("sans prénom, aucune liste", () => {
+  assert.deepEqual(seed.buildSeedWords("", "  "), []);
 });
 
 test("un e-mail n'entre pas dans la liste", () => {
-  assert.deepEqual(seed.buildSeedWords("ada@example.com", "Martin"), ["Martin", "Agilotext"]);
+  assert.deepEqual(seed.buildSeedWords("ada@example.com", "Martin"), ["Martin"]);
 });
 
-test("doublon de casse ignoré", () => {
-  assert.deepEqual(seed.buildSeedWords("Agilotext", "Dupont"), ["Agilotext", "Dupont"]);
+test("Agilotext n'est pas semé, même s'il est passé comme prénom", () => {
+  assert.deepEqual(seed.buildSeedWords("Agilotext", "Dupont"), ["Dupont"]);
 });
 
 test("catalogue vide : créer", () => {
