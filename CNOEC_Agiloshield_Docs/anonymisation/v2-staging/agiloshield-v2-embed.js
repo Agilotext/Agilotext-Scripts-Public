@@ -2089,7 +2089,7 @@ function renderIssues(entry){
   const rawReasons=review.qaReasons||review.reasons||[];
   const hiddenTechnicalSignals=rawReasons.length+
     (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
-  if(!progress.remaining&&hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
+  if(!progress.remaining&&hiddenTechnicalSignals&&review.canApproveHumanVerification===false&&review.humanVerifiedDeliverable!==true){
     const note=el('div',null,'asv2-review-safety-note',issuesContent);
     el('strong','Document non prêt',null,note);
     el('p',copy.review.batch.heldByServer,'asv2-muted',note);
