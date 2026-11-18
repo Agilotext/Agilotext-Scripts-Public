@@ -995,25 +995,76 @@ document.addEventListener('DOMContentLoaded', () => {
         payload = fd;
       }
 
-      sendWithRetry(payload, 3, uploadSource === 'youtube')
+      function maybeEnrichAndSend(data, isYouTube) {
+        var send = function (finalData) { return sendWithRetry(finalData, 3, isYouTube); };
+        var api = window.AgiloMaestroContext;
+        if (!api) return send(data);
+        if (isYouTube) {
+          if (typeof api.prepareUploadContext !== 'function') return send(data);
+          return Promise.resolve(api.prepareUploadContext()).then(function (prep) {
+            if (prep && prep.active && prep.ok === false) {
+              return { maestroHold: true, message: prep.message || 'Les documents n’ont pas pu être préparés. L’envoi n’a pas démarré.' };
+            }
+            if (prep && prep.contextId && data && typeof data === 'object' && !(data instanceof FormData)) {
+              data.contextId = prep.contextId;
+              data.doSummary = 'true';
+            }
+            return send(data);
+          });
+        }
+        if (!(data instanceof FormData) || typeof api.enrichFormData !== 'function') return send(data);
+        if (typeof api.hasActiveContext === 'function' && api.hasActiveContext()) {
+          try { data.delete('doSummary'); } catch (e) { /* ignore */ }
+          data.append('doSummary', 'true');
+        }
+        return Promise.resolve(api.enrichFormData(data)).then(function (fd2) {
+          if (fd2 && fd2.maestroHold) return fd2;
+          return send(fd2 || data);
+        });
+      }
+
+      maybeEnrichAndSend(payload, uploadSource === 'youtube')
         .then(data => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
 
+          if (data && data.maestroHold) {
+            if (typeof showBusinessProcessingError === 'function') showBusinessProcessingError(data.message);
+            else alert(data.message);
+            return;
+          }
+
           if (data && data.status === 'OK') {
-            showSuccess();
-            captureTranscriptCreated(uploadSource);
             const jobId = data.jobIdList && data.jobIdList[0];
-            if (jobId) {
-              localStorage.setItem('currentJobId', jobId);
-              document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
-              var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
-              var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
-            }
-            if (successDiv) successDiv.style.display = 'flex';
-            if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
-            checkTranscriptStatus(jobId, email);
-            if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
+            var confirmP = (window.AgiloMaestroContext && typeof window.AgiloMaestroContext.confirmStoredDocuments === 'function')
+              ? window.AgiloMaestroContext.confirmStoredDocuments(jobId)
+              : Promise.resolve({ ok: true, skipped: true });
+            return confirmP.then(function (check) {
+              if (jobId) {
+                localStorage.setItem('currentJobId', jobId);
+                document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
+              }
+              if (check && check.mismatch) {
+                if (typeof showBusinessProcessingError === 'function') showBusinessProcessingError(check.message);
+                else alert(check.message);
+                return;
+              }
+              if (check && check.unchecked && check.message) alert(check.message);
+              showSuccess();
+              captureTranscriptCreated(uploadSource);
+              if (jobId) {
+                var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
+                var recordSessionId = sessionInput ? sessionInput.value : undefined;
+                document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              }
+              if (check && check.joined && check.message) {
+                var joinedBanner = document.getElementById('maestro-context-loaded-banner');
+                if (joinedBanner) joinedBanner.textContent = check.message;
+              }
+              if (successDiv) successDiv.style.display = 'flex';
+              if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
+              checkTranscriptStatus(jobId, email);
+              if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
+            });
           } else {
             document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
             if (!resolveAndShowUploadError(data)) {
