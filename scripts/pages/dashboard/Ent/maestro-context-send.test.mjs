@@ -54,5 +54,15 @@ assert.equal(maestro.includes('preanalyze_fallback_all'), true);
 assert.equal(maestro.includes('Aperçu. Les documents seront joints à l’envoi.'), true);
 assert.equal(editor.includes('Documents joints'), true);
 assert.equal(editor.includes('Télécharger les originaux'), true);
+assert.equal(editor.includes('M7.75,5v6.75'), true);
+assert.equal(editor.includes('ed-title-wrap'), true);
+assert.equal(editor.includes('aria-expanded'), true);
+assert.equal(editor.includes('panel.hidden = true'), true);
+assert.equal(editor.includes('#e8f5e9'), false);
+assert.equal(editor.includes("querySelector('main')"), false);
+assert.equal(editor.includes('firstChild'), false);
+assert.equal(editor.includes('agenda'), false);
+assert.equal(editor.includes('wordBoost'), false);
+assert.equal(editor.includes('word boost'), false);
 
 console.log('maestro-context-send.test: ok');
