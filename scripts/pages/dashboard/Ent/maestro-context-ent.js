@@ -29,6 +29,7 @@
   var LABEL_EMPTY = 'Glissez un PDF, DOCX ou TXT ou&nbsp;<span class="browse">Parcourir</span>';
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
+  var API_GET_CONTEXT = 'https://api.agilotext.com/api/v1/getJobContext';
   var DEBOUNCE_MS = 400;
   var CONTEXT_USED_KEY = 'agilo.maestro.contextUsed.v1';
   var NEW_BADGE_UNTIL_MS = Date.parse('2026-09-01T00:00:00+02:00');
@@ -46,8 +47,11 @@
     error_maestro_context_ocr_failed: 'Échec OCR du PDF scanné.',
     error_maestro_context_segment_limit: 'Documents trop longs pour l’analyse.',
     error_maestro_context_json_invalid: 'Analyse structurée invalide.',
-    error_maestro_context_not_found: 'Contexte introuvable.',
-    error_invalid_token: 'Session expirée — reconnectez-vous.'
+    error_maestro_context_not_found: 'Les documents n’ont pas été retrouvés. Réessayez.',
+    error_invalid_token: 'Session expirée. Reconnectez-vous.',
+    ERROR_MAESTRO_CONTEXT_AMBIGUOUS: 'Les documents et l’aperçu ont été envoyés ensemble. Réessayez.',
+    ERROR_MAESTRO_CONTEXT_NOT_READY: 'L’analyse des documents n’est pas terminée. Réessayez.',
+    ERROR_MAESTRO_CONTEXT_NOT_FOUND: 'Les documents n’ont pas été retrouvés. Réessayez.'
   };
 
   /** @type {{ id: string, file: File, status: string, statusText: string }[]} */
@@ -59,6 +63,7 @@
     lastPreview: null,
     debounceTimer: null,
     analyzeGen: 0,
+    pendingNames: [],
     edition: 'ent',
     locked: false,
     maxDocs: 5,
@@ -602,7 +607,7 @@
     }
     showPreviewHtml(
       '<details class="maestro-preview-details">' +
-        '<summary>Aperçu indicatif <span class="maestro-beta-badge">bêta</span></summary>' +
+        '<summary>Aperçu. Les documents seront joints à l’envoi. <span class="maestro-beta-badge">bêta</span></summary>' +
         '<div class="maestro-preview-body">' + parts.join('') + '</div>' +
       '</details>'
     );
@@ -865,34 +870,191 @@
     return !!(state.enabled && !state.locked && docs.length > 0);
   }
 
-  /** Envoi audio : contextId seul (jamais contextFile → error_maestro_context_ambiguous) */
+  /**
+   * contextId si l’aperçu est prêt.
+   * Sinon tous les fichiers encore là.
+   * Rien à envoyer : on retient l’audio.
+   */
+  function decideContextSend(contextId, files) {
+    if (contextId) return { mode: 'contextId' };
+    var list = [];
+    var source = files || [];
+    for (var i = 0; i < source.length; i++) {
+      if (source[i]) list.push(source[i]);
+    }
+    if (!list.length) return { mode: 'hold' };
+    return { mode: 'files', count: list.length };
+  }
+
+  function sameNameSet(expected, stored) {
+    function norm(s) { return String(s || '').trim().toLowerCase(); }
+    var a = (expected || []).map(norm).filter(Boolean).sort();
+    var b = (stored || []).map(norm).filter(Boolean).sort();
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  function documentNamesFromContext(data) {
+    var analysis = (data && data.analysis) || {};
+    var list = analysis.documents || [];
+    if (!Array.isArray(list)) return [];
+    return list.map(function (d) {
+      if (!d) return '';
+      if (typeof d === 'string') return d.trim();
+      return String(d.filename || d.fileName || d.name || '').trim();
+    }).filter(Boolean);
+  }
+
+  function chosenFiles() {
+    var files = [];
+    for (var i = 0; i < docs.length; i++) {
+      if (docs[i] && docs[i].file instanceof File) files.push(docs[i].file);
+    }
+    return files;
+  }
+
+  function stampExpected(files) {
+    state.pendingNames = (files || []).map(function (file) {
+      return file && file.name ? file.name : '';
+    }).filter(Boolean);
+  }
+
+  function prepareContextFields(fd) {
+    forceSummaryOn();
+    try { fd.delete('doSummary'); } catch (e) { /* ignore */ }
+    fd.append('doSummary', 'true');
+    try { fd.delete('contextFile'); } catch (e1) { /* ignore */ }
+    try { fd.delete('contextId'); } catch (e2) { /* ignore */ }
+  }
+
+  function holdSend(message) {
+    trackMaestroEvent('maestro_context_mismatch', {
+      reason: 'files_missing',
+      expected: docs.length,
+      stored: 0
+    });
+    return {
+      maestroHold: true,
+      message: message
+    };
+  }
+
+  function applyContextId(fd) {
+    prepareContextFields(fd);
+    fd.append('contextId', state.contextId);
+    stampExpected(chosenFiles());
+    markContextUsed();
+    trackMaestroEvent('maestro_upload_with_context', {
+      participantCount: participantCountFromData(state.lastPreview),
+      docs: state.pendingNames.length
+    });
+    return fd;
+  }
+
+  function applyAllFiles(fd) {
+    var files = chosenFiles();
+    var decision = decideContextSend(null, files);
+    if (decision.mode === 'hold') {
+      return holdSend('Les documents ne sont plus disponibles. L’envoi n’a pas démarré. Choisissez-les à nouveau.');
+    }
+    prepareContextFields(fd);
+    files.forEach(function (file) {
+      fd.append('contextFile', file, file.name);
+    });
+    stampExpected(files);
+    markContextUsed();
+    trackMaestroEvent('maestro_upload_without_context', {
+      reason: 'preanalyze_fallback_all',
+      docs: files.length
+    });
+    return fd;
+  }
+
+  function attachReadyContext(fd) {
+    var decision = decideContextSend(state.contextId, chosenFiles());
+    if (decision.mode === 'contextId') return applyContextId(fd);
+    return applyAllFiles(fd);
+  }
+
+  /** Envoi audio : contextId seul, ou tous les fichiers, jamais les deux. */
   function enrichFormData(fd) {
-    if (!hasActiveContext()) return Promise.resolve(fd);
+    if (!hasActiveContext()) {
+      state.pendingNames = [];
+      return Promise.resolve(fd);
+    }
 
     return waitPreAnalyze().then(function () {
-      forceSummaryOn();
-      try { fd.delete('doSummary'); } catch (e) { /* ignore */ }
-      fd.append('doSummary', 'true');
-      try { fd.delete('contextFile'); } catch (e1) { /* ignore */ }
-      try { fd.delete('contextId'); } catch (e2) { /* ignore */ }
-
-      if (state.contextId) {
-        fd.append('contextId', state.contextId);
-        markContextUsed();
-        trackMaestroEvent('maestro_upload_with_context', {
-          participantCount: participantCountFromData(state.lastPreview),
-          docs: docs.length
-        });
-      } else if (docs.length === 1) {
-        // Dernier recours : 1 seul fichier sans contextId (preAnalyze a échoué)
-        fd.append('contextFile', docs[0].file, docs[0].file.name);
-        markContextUsed();
-        trackMaestroEvent('maestro_upload_without_context', { reason: 'preanalyze_fallback_file' });
-      } else if (docs.length > 0) {
-        trackMaestroEvent('maestro_upload_without_context', { reason: 'preanalyze_failed' });
-      }
-      return fd;
+      if (state.contextId) return attachReadyContext(fd);
+      return runPreAnalyzeAll().then(function () {
+        return attachReadyContext(fd);
+      });
     });
+  }
+
+  function mismatchMessage(storedCount, expectedCount) {
+    var storedLabel = storedCount + ' document' + (storedCount > 1 ? 's' : '') + ' joint' + (storedCount > 1 ? 's' : '');
+    var expectedLabel = expectedCount + ' choisi' + (expectedCount > 1 ? 's' : '');
+    return storedLabel + ' sur ' + expectedLabel + '. L’enregistrement est créé, les pièces ne correspondent pas.';
+  }
+
+  function frenchError(code) {
+    var text = String(code || '');
+    if (!text) return '';
+    if (ERROR_MAP[text]) return ERROR_MAP[text];
+    for (var key in ERROR_MAP) {
+      if (Object.prototype.hasOwnProperty.call(ERROR_MAP, key) && text.indexOf(key) !== -1) {
+        return ERROR_MAP[key];
+      }
+    }
+    return '';
+  }
+
+  function confirmStoredDocuments(jobId) {
+    var expected = (state.pendingNames || []).slice();
+    if (!expected.length) return Promise.resolve({ ok: true, skipped: true });
+    var email = resolveMemberEmail();
+    var unchecked = {
+      ok: false,
+      unchecked: true,
+      message: 'Vérification impossible. L’enregistrement est créé, les documents n’ont pas pu être confirmés.'
+    };
+    return ensureTokenForEmail(email, false).then(function (ok) {
+      if (!ok || !w.globalToken || !email || !jobId) return unchecked;
+      var body = new URLSearchParams();
+      body.set('username', email);
+      body.set('token', w.globalToken);
+      body.set('jobId', String(jobId));
+      body.set('edition', state.edition || 'ent');
+      return fetch(API_GET_CONTEXT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }).then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          var stored = documentNamesFromContext(data);
+          if (!res.ok || !data || data.status !== 'OK' || !sameNameSet(expected, stored)) {
+            trackMaestroEvent('maestro_context_mismatch', {
+              expected: expected.length,
+              stored: stored.length
+            });
+            return {
+              ok: false,
+              mismatch: true,
+              message: mismatchMessage(stored.length, expected.length)
+            };
+          }
+          var n = stored.length;
+          return {
+            ok: true,
+            joined: true,
+            message: n + ' document' + (n > 1 ? 's' : '') + ' joint' + (n > 1 ? 's' : '') + '.'
+          };
+        });
+      }).catch(function () { return unchecked; });
+    }).catch(function () { return unchecked; });
   }
 
   function isFileTabActive() {
@@ -1088,7 +1250,9 @@
       w.AgiloMaestroContext = {
         enrichFormData: function (fd) { return Promise.resolve(fd); },
         hasActiveContext: function () { return false; },
-        uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); }
+        uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
+        confirmStoredDocuments: function () { return Promise.resolve({ ok: true, skipped: true }); },
+        frenchError: frenchError
       };
       return;
     }
@@ -1206,6 +1370,8 @@
     w.AgiloMaestroContext = {
       enrichFormData: enrichFormData,
       hasActiveContext: hasActiveContext,
+      confirmStoredDocuments: confirmStoredDocuments,
+      frenchError: frenchError,
       uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
       clear: function () { clearAllDocs(); },
       getState: function () {

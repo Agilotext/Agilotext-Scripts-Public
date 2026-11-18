@@ -943,6 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
           data.append('doSummary', 'true');
         }
         return Promise.resolve(window.AgiloMaestroContext.enrichFormData(data)).then(function (fd2) {
+          if (fd2 && fd2.maestroHold) return fd2;
           return send(fd2 || data);
         });
       }
@@ -951,20 +952,43 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
 
+          if (data && data.maestroHold) {
+            showDefaultError();
+            if (data.message) alert(data.message);
+            return;
+          }
+
           if (data && data.status === 'OK') {
-            showSuccess();
             const jobId = data.jobIdList && data.jobIdList[0];
-            if (jobId) {
-              localStorage.setItem('currentJobId', jobId);
-              document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
-              var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
-              var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
-            }
-            if (successDiv) successDiv.style.display = 'flex';
-            if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
-            checkTranscriptStatus(jobId, email);
-            if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
+            var confirmP = (window.AgiloMaestroContext && typeof window.AgiloMaestroContext.confirmStoredDocuments === 'function')
+              ? window.AgiloMaestroContext.confirmStoredDocuments(jobId)
+              : Promise.resolve({ ok: true, skipped: true });
+            return confirmP.then(function (check) {
+              if (jobId) {
+                localStorage.setItem('currentJobId', jobId);
+                document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
+              }
+              if (check && check.mismatch) {
+                showDefaultError();
+                if (check.message) alert(check.message);
+                return;
+              }
+              if (check && check.unchecked && check.message) alert(check.message);
+              showSuccess();
+              if (jobId) {
+                var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
+                var recordSessionId = sessionInput ? sessionInput.value : undefined;
+                document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              }
+              if (check && check.joined && check.message) {
+                var joinedBanner = document.getElementById('maestro-context-loaded-banner');
+                if (joinedBanner) joinedBanner.textContent = check.message;
+              }
+              if (successDiv) successDiv.style.display = 'flex';
+              if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
+              checkTranscriptStatus(jobId, email);
+              if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
+            });
           } else {
             document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
             const err = (data && data.errorMessage) || '';
@@ -1001,7 +1025,14 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('invalid'))) showError('youtubeInvalid');
             else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('private'))) showError('youtubePrivate');
             else if (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('not found')) showError('youtubeNotFound');
-            else { console.error('❌ Erreur non mappée:', err); showDefaultError(); if (err && err.trim()) alert('Erreur: ' + err); }
+            else {
+              var maestroFr = (window.AgiloMaestroContext && typeof window.AgiloMaestroContext.frenchError === 'function')
+                ? window.AgiloMaestroContext.frenchError(err) : '';
+              console.error('Erreur non mappée:', err);
+              showDefaultError();
+              if (maestroFr) alert(maestroFr);
+              else if (err && err.trim()) alert('Erreur: ' + err);
+            }
           }
         })
         .catch(err => {
