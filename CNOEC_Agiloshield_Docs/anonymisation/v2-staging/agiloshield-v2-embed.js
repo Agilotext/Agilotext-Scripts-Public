@@ -1171,9 +1171,11 @@ function renderHistory(){
     const open=()=>openHistoryRow(row).catch(fail);
     const canDownload=status==='READY'||(status==='REVIEW_REQUIRED'&&
       state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry)));
-    if(status==='READY')
+    if(status==='READY'){
       buttonWithIcon('Télécharger','download','asv2-primary asv2-doc-primary',acts,
         ()=>downloadHistoryRow(row).catch(fail));
+      buttonWithIcon('Ouvrir','eye','asv2-secondary',acts,open);
+    }
     else if(status==='REVIEW_REQUIRED')
       buttonWithIcon('Vérifier','eye','asv2-primary asv2-doc-primary',acts,open);
     else button('Voir le détail','asv2-secondary asv2-doc-primary',acts,open);
@@ -1210,7 +1212,13 @@ async function loadHistory(more=false){
   if(!enabled||!path){renderHistory();return;}
   const cursor=more?state.history.cursors[source]:null;
   if(more&&!cursor)return;
-  const response=await api.listHistory(path,{cursor,limit:50});
+  let response;
+  try{response=await api.listHistory(path,{cursor,limit:50});}
+  catch(error){
+    if(path==='/history/v2'&&(error?.status===404||error?.code==='ROUTE_NOT_FOUND'))
+      response=await api.listHistory('/history',{cursor,limit:50});
+    else throw error;
+  }
   if(epoch!==state.accountEpoch)return;
   if(!Array.isArray(response?.items))throw new Error('Historique indisponible');
   const prior=more?state.history[source]:[];
@@ -1434,6 +1442,34 @@ async function limitedStatus(jobId){
     state.pollWaiters.shift()?.();
   }
 }
+function hasReviewRevision(job){
+  return job?.reviewRevision!=null&&String(job.reviewRevision)!=='';
+}
+function isJobNotReady(error){
+  return error?.status===409&&String(error?.code||error?.message||'').includes('JOB_NOT_READY');
+}
+function failureText(job){
+  const mapped=jobErrorMessage(job);
+  if(mapped&&mapped!==copy.errors.failed)return mapped;
+  const raw=job?.error;
+  if(raw&&typeof raw==='object')return raw.message||raw.code||mapped;
+  if(typeof raw==='string'&&raw)return raw;
+  if(typeof job?.errorMessage==='string'&&job.errorMessage)return job.errorMessage;
+  return mapped||'Le traitement a échoué.';
+}
+function noteTerminalFailure(entry, job, status){
+  entry.applying=false;
+  entry.status=status==='ERROR'?'ERROR':'FAILED';
+  entry.revision=hasReviewRevision(job)?job.reviewRevision:null;
+  entry.review=null;entry.regions=null;entry.pendingMask=null;entry.hasCurrentResult=false;
+  entry.error=failureText(job);
+  renderQueue();
+  if(state.drawerOpen&&state.active===entry.key)renderDrawer(entry);
+  if(!entry.announcedComplete){
+    entry.announcedComplete=true;
+    notify(entry.name+' : '+entry.error,'is-error');
+  }
+}
 async function pollEntry(entry,{intervalMs,expectRevision,untilPublished}={}){
   if(entry.polling||!entry.jobId||!currentAccountEntry(entry))return;
   entry.polling=true;
@@ -1446,8 +1482,10 @@ async function pollEntry(entry,{intervalMs,expectRevision,untilPublished}={}){
     const published=!untilPublished||(revisionReady&&job.workflowState!=='DIRTY');
     if(!isTerminal(entry.status))entry.hasCurrentResult=false;
     renderQueue();renderDrawer(entry);
-    const failed=entry.status==='FAILED'||entry.status==='ERROR';
-    if(failed||(untilPublished&&entry.status==='READY')||(isTerminal(entry.status)&&revisionReady&&published)){
+    if((entry.status==='FAILED'||entry.status==='ERROR')&&!hasReviewRevision(job)){
+      noteTerminalFailure(entry, job, entry.status);return;
+    }
+    if((untilPublished&&entry.status==='READY'&&revisionReady)||(isTerminal(entry.status)&&revisionReady&&published)){
       entry.applying=false;await loadCurrent(entry);return;
     }
     if(deadline&&Date.now()>deadline){
@@ -1492,9 +1530,39 @@ async function loadCurrent(entry,{retryStale=true}={}){
   const job=await api.status(entry.jobId);assertDigest(entry,job);
   if(!currentAccountEntry(entry))return;
   const currentStatus=statusOf(job);
+  if(!hasReviewRevision(job)&&(currentStatus==='FAILED'||currentStatus==='ERROR')){
+    noteTerminalFailure(entry, job, currentStatus);return;
+  }
+  if(!hasReviewRevision(job)){
+    entry.status=currentStatus;entry.review=null;entry.regions=null;entry.error=null;
+    renderQueue();
+    if(state.drawerOpen&&state.active===entry.key)renderDrawer(entry);
+    return;
+  }
   const [review,regions]=await Promise.all([
-    api.review(entry.jobId).catch(error=>{if(currentStatus!=='FAILED')throw error;return null;}),
-    api.regions(entry.jobId).catch(()=>null)]);
+    api.review(entry.jobId).catch(error=>{
+      if(isJobNotReady(error))return {__notReady:true};
+      if(currentStatus==='FAILED')return null;
+      throw error;
+    }),
+    api.regions(entry.jobId).catch(error=>{
+      if(isJobNotReady(error))return {__notReady:true};
+      throw error;
+    })]);
+  if(review?.__notReady||regions?.__notReady){
+    const again=await api.status(entry.jobId);assertDigest(entry, again);
+    if(!hasReviewRevision(again)){
+      const againStatus=statusOf(again);
+      if(againStatus==='FAILED'||againStatus==='ERROR')noteTerminalFailure(entry, again, againStatus);
+      else{
+        entry.status=againStatus;entry.error='Le document n’est pas encore prêt.';
+        renderQueue();
+        if(state.drawerOpen&&state.active===entry.key)renderDrawer(entry);
+      }
+      return;
+    }
+    return loadCurrent(entry,{retryStale});
+  }
   if(review)assertDigest(entry,review);
   if(!currentAccountEntry(entry))return;
   if(review&&(String(review.revision)!==String(job.reviewRevision)||
@@ -1548,15 +1616,6 @@ async function loadCurrent(entry,{retryStale=true}={}){
     notify(entry.name+' : '+safeStatus(currentStatus)+'. Retrouvez ce fichier dans « '+
       (state.capabilities.historyV2===true?copy.historyDurable:copy.historySession)+' ».');
     updateLastDocCard(entry);
-  }
-  if((currentStatus==='READY'||currentStatus==='REVIEW_REQUIRED')&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
-    state.autoOpenedBatches.add(entry.batchId);
-    if(state.surface!=='restore'&&!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
-        !drop.classList.contains('is-dragging')&&
-        !document.activeElement?.matches?.('textarea, input[type="text"], input[type="search"]')&&
-        document.visibilityState==='visible')
-      openDrawer(entry);
-    else notify('Un résultat est prêt. Ouvrez-le depuis « Documents de cette session ».');
   }
 }
 function setMobileTab(value){
@@ -2654,6 +2713,10 @@ async function renderPreview(entry){
   state.previewFocus=null;
   if(state.previewCleanup){state.previewCleanup();state.previewCleanup=null;}
   clear(viewerToolbar);clear(viewerBody);clear(reviewTools);
+  if((entry.status==='FAILED'||entry.status==='ERROR')&&!entry.revision){
+    el('p',entry.error||'Le traitement a échoué.','asv2-muted',viewerBody);
+    return;
+  }
   const kind=entry.previewKind;
   const switcher=el('div',null,'asv2-preview-switch',reviewTools);
   const options=[['Original','origin','eye'],
@@ -3295,13 +3358,5 @@ window.addEventListener('pageshow',event=>{
 loadPreferences().then(async()=>{
   await restoreSession();
   await loadHistory();
-  try{
-    const key=accountStorageKey(':drawer');
-    const activeKey=key?sessionStorage.getItem(key):null;
-    if(activeKey){
-      const entry=state.entries.find(e=>e.key===activeKey);
-      if(entry)openDrawer(entry);
-    }
-  }catch(_){}
 }).catch(error=>{
   historyHint.textContent=errorText(error);renderHistory();});
