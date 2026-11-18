@@ -1143,6 +1143,9 @@ function renderHistory(){
   }
   for(const row of rows){
     const status=historyStatus(row),name=row.fileName||row.filename||'Document';
+    const sessionEntry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
+    const attested=status==='REVIEW_REQUIRED'&&(row.humanVerifiedDeliverable===true||
+      sessionEntry?.review?.humanVerifiedDeliverable===true);
     const shown=status;
     const v2=source==='v2'&&!!row.jobId;
     const item=el('div',null,'asv2-doc is-'+shown.toLowerCase(),historyList);item.setAttribute('role','listitem');
@@ -1164,7 +1167,7 @@ function renderHistory(){
     el('span',[historySize(row.sizeBytes??row.fileLength),
       row.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé',
       historyDate(row.createdAt||row.dtCreation)].join(' · '),'asv2-doc-meta',info);
-    statusPill(shown,item);
+    statusPill(shown,item,attested?'Validé':undefined);
     const acts=el('div',null,'asv2-doc-actions',item);
     if(!v2)continue;
     const fail=error=>notify(errorText(error),'is-error');
@@ -1194,9 +1197,7 @@ function renderHistory(){
       items.push({label:'Restaurer avec la clé',icon:'key',run:()=>openRestore()});
     }
     items.push({label:'Copier la référence support',icon:'circle-info',run:()=>copyReference(row.jobId)});
-    const sessionEntry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
-    if(status==='REVIEW_REQUIRED'&&(row.humanVerifiedDeliverable===true||
-      sessionEntry?.review?.humanVerifiedDeliverable===true))
+    if(attested)
       items.push({label:'Télécharger la copie vérifiée par une personne',icon:'shield-check',
         run:()=>downloadHistoryHuman(row).catch(fail)});
     items.push('separator',{label:'Retirer de cet écran',icon:'trash',danger:true,run:()=>removeEntryFromSession(row)});
@@ -1885,23 +1886,24 @@ function renderDrawer(entry){
   meta.textContent=[entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'].filter(Boolean).join(' · ');
   clear(drawerStatus);
-  statusPill(entry.status,drawerStatus);
+  statusPill(entry.status,drawerStatus,entryAttested(entry)?'Validé':undefined);
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
+    const attested=entryAttested(entry);
     const downloadControl=iconButton('download','Télécharger',
-      'asv2-drawer-icon'+(entry.status==='READY'?' is-primary':''),drawerDownloads,
-      ()=>download(entry,entry.status==='READY').catch(showError));
-    downloadControl.title=entry.status==='READY'?'Télécharger':'Télécharger (une confirmation sera demandée)';
+      'asv2-drawer-icon'+(entry.status==='READY'||attested?' is-primary':''),drawerDownloads,
+      ()=>(attested?deliverValidated(entry):download(entry,entry.status==='READY')).catch(showError));
+    downloadControl.title=entry.status==='READY'||attested?'Télécharger':'Télécharger (une confirmation sera demandée)';
     if(canDownloadKey(entry)){
       const keyControl=iconButton('key','Télécharger la clé','asv2-drawer-icon',drawerDownloads,
-        ()=>downloadKey(entry).catch(showError));
+        ()=>downloadKey(entry,attested?{skipConfirm:true,quiet:true}:undefined).catch(showError));
       keyControl.title='Télécharger la clé de pseudonymisation';
     }
   }
   if(entry.applying){
     drawerMessage(copy.review.applying,'is-info');
   }else if(entry.status==='REVIEW_REQUIRED'){
-    if(!drawerNotice.classList.contains('is-error'))drawerMessage('');
+    if(!drawerNotice.classList.contains('is-error')&&!drawerNotice.classList.contains('is-success'))drawerMessage('');
   }else drawerMessage(safeStatus(entry.status),
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='TIMED_OUT'?'is-warning':'');
@@ -1949,7 +1951,10 @@ function renderIssues(entry){
   const visibleLimit=Math.max(entry.reviewVisibleCount||20, (entry.reviewFocusIndex||0)+1);
 
   const reviewSummary=el('div',null,'asv2-review-summary',issuePane);
-  el('h3',progress.remaining?copy.review.toCheck(progress.remaining):copy.review.readyToValidate,null,reviewSummary);
+  el('h3',entry.status==='READY'?copy.review.readyToValidate:
+    entry.review?.humanVerifiedDeliverable?copy.review.validatedTitle:
+    progress.remaining?copy.review.toCheck(progress.remaining):
+    copy.review.checkTitle,null,reviewSummary);
   if(progress.total){
     const row=el('div',null,'asv2-review-progress',reviewSummary);
     el('span',copy.review.progress(progress.done,progress.total),null,row);
@@ -2148,14 +2153,17 @@ function renderFooter(entry){
     const work=remainingReviewWork(entry);
     const safety=el('p',null,'asv2-review-safety',drawerFooter);
     svgIcon('shield-check',safety,18);
-    el('span',work.rows.length?copy.review.pendingLine(work.rows.length):
+    const attested=entryAttested(entry);
+    el('span',attested?copy.review.validatedAgain:
+      work.rows.length?copy.review.pendingLine(work.rows.length):
       work.unresolved.length?copy.review.batch.blockedZones(work.unresolved.length)+'.':
       work.problems.length?copy.review.batch.blockedRules(work.problems.length)+'.':
       copy.review.safetyLine,null,safety);
-    if(editorCapabilities.humanVerification){
-      const validate=buttonWithIcon(copy.review.validate,'shield-check','asv2-primary',drawerFooter,
-        ()=>approveHumanReview(entry,validate).catch(showError));
-      validate.disabled=Boolean(entry.commandBusy)||Boolean(entry.batchRunning);
+    if(editorCapabilities.humanVerification||attested){
+      const validate=buttonWithIcon(attested?'Télécharger':copy.review.validate,
+        attested?'download':'shield-check','asv2-primary',drawerFooter,
+        ()=>(attested?deliverValidated(entry):approveHumanReview(entry,validate)).catch(showError));
+      validate.disabled=Boolean(entry.commandBusy)||Boolean(entry.batchRunning)||Boolean(entry.validating);
     }
     renderShortcutHelp(drawerFooter);
   }
@@ -2527,30 +2535,68 @@ async function deliverReady(entry){
   try{await download(entry,true);}
   catch(_){drawerMessage(copy.review.batch.downloadBlocked,'is-warning');}
 }
-async function approveHumanReview(entry,control){
-  if(entry.commandBusy||entry.batchRunning)return;
-  if(entry.status==='READY'){await deliverReady(entry);return;}
-  const work=remainingReviewWork(entry);
-  const choice=await askBatchDecision(entry,work);
-  if(choice==='REVIEW'){guideToPendingReview(entry);return;}
-  if(choice==='TRACE'){
-    const row=work.rows.find(item=>passageNeedsPlace(entry,item))||work.rows[0];
-    const unresolved=work.unresolved[0];
-    if(row)startPlaceTrace(entry,{occurrenceId:row.id,id:row.id,page:Number(row.page)||entry.page,
-      category:row.category||row.semanticType});
-    else if(unresolved)startPlaceTrace(entry,unresolved);
-    return;
+function entryAttested(entry){
+  return entry?.status==='REVIEW_REQUIRED'&&entry.review?.humanVerifiedDeliverable===true;
+}
+function markValidated(entry){
+  if(entry.review)entry.review.humanVerifiedDeliverable=true;
+  for(const row of historyRows('v2')){
+    if(String(row.jobId)===String(entry.jobId))row.humanVerifiedDeliverable=true;
   }
-  if(choice!=='MASK'&&choice!=='KEEP')return;
+  renderHistory();
+  if(state.drawerOpen&&state.active===entry.key)renderDrawer(entry);
+}
+function validationStop(entry){
+  const work=remainingReviewWork(entry);
+  if(work.unresolved.length)return copy.review.batch.blockedZones(work.unresolved.length)+'.';
+  if(work.problems.length)return copy.review.batch.blockedRules(work.problems.length)+'.';
+  if(work.rows.length)return copy.review.pendingLine(work.rows.length);
+  const blockers=Array.isArray(entry.review?.humanVerificationBlockers)?entry.review.humanVerificationBlockers:[];
+  if(blockers.includes('known_leak_or_missing_transform'))return 'Un passage reste lisible. La validation ne part pas.';
+  if(blockers.includes('unresolved_mask'))return copy.review.batch.blockedZones(1)+'.';
+  if(blockers.includes('remaining_review'))return 'Des passages restent à trancher. La validation ne part pas.';
+  return blockers.length?'La validation ne peut pas partir.':'La validation ne peut pas partir.';
+}
+async function deliverValidated(entry){
+  await downloadHumanVerified(entry,{quiet:true});
+  if(canDownloadKey(entry))await downloadKey(entry,{skipConfirm:true,quiet:true});
+  markValidated(entry);
+  drawerMessage('Document validé.','is-success');
+  notify('Document validé.');
+}
+async function approveHumanReview(entry,control){
+  if(entry.commandBusy||entry.batchRunning||entry.validating)return;
+  if(entry.status==='READY'){await deliverReady(entry);return;}
+  if(entryAttested(entry)){await deliverValidated(entry);return;}
+  entry.validating=true;
   if(control?.isConnected)control.disabled=true;
+  renderFooter(entry);
   try{
-    if(!await applyBatchDecision(entry,choice))return;
+    const work=remainingReviewWork(entry);
+    if(work.rows.length)await applyBatchDecision(entry,'MASK');
+    await loadCurrent(entry);
+    if(!currentAccountEntry(entry))return;
     if(entry.status==='READY'){await deliverReady(entry);return;}
-    await loadCurrent(entry).catch(()=>{});
-    if(entry.status==='READY'){await deliverReady(entry);return;}
-    drawerMessage(copy.review.batch.notReady,'is-warning');
+    if(entryAttested(entry)){await deliverValidated(entry);return;}
+    const after=remainingReviewWork(entry);
+    if(after.rows.length||after.unresolved.length||after.problems.length){
+      drawerMessage(validationStop(entry),'is-warning');
+      return;
+    }
+    if(entry.review?.canApproveHumanVerification!==true){
+      drawerMessage(validationStop(entry),'is-warning');
+      return;
+    }
+    await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks:{
+      names:true,addresses:true,phones:true,identifiers:true,
+      logos_images:true,visual_regions:true,original_vs_final_all_pages:true}});
+    await loadCurrent(entry);
+    if(entry.review?.humanVerifiedDeliverable===true){await deliverValidated(entry);return;}
+    drawerMessage('L’attestation n’a pas été confirmée.','is-warning');
   }finally{
+    entry.validating=false;
     if(control?.isConnected)control.disabled=false;
+    if(state.drawerOpen&&state.active===entry.key)renderFooter(entry);
   }
 }
 async function undoLastReview(entry){
@@ -3284,17 +3330,18 @@ async function download(entry,certified,options){
   const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
   link.href=url;link.download=filename;link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
+  if(options?.quiet)return;
   const msg=certified?'Téléchargement du résultat démarré.':
     'Téléchargement du résultat démarré (document avec signalements).';
   drawerMessage(msg);
   notify(msg);
 }
-async function downloadKey(entry){
+async function downloadKey(entry,options){
   if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
   if(!canDownloadKey(entry))
     throw new Error('Clé indisponible pour ce document');
   const certified=entry.status==='READY';
-  if(!certified&&!await confirmAction('Cette clé appartient à un résultat non vérifié pouvant encore contenir des données sensibles. La télécharger quand même ?'))return;
+  if(!certified&&!options?.skipConfirm&&!await confirmAction('Cette clé appartient à un résultat non vérifié pouvant encore contenir des données sensibles. La télécharger quand même ?'))return;
   const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
     listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
   const response=await api.checkedArtifact(entry.jobId,{kind:'key',certified,expectedDigest:entry.digest,
@@ -3305,9 +3352,10 @@ async function downloadKey(entry){
   link.href=url;link.download='cle-pseudonymes-'+(certified?'':'NON-VERIFIE-')+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
     '-'+String(entry.revision).replace(/[^A-Za-z0-9_-]/g,'')+'.properties';
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  if(options?.quiet)return;
   drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
 }
-async function downloadHumanVerified(entry){
+async function downloadHumanVerified(entry,options){
   if(!currentAccountEntry(entry)||entry.status!=='REVIEW_REQUIRED'||
       entry.review?.humanVerifiedDeliverable!==true)throw new Error('Attestation indisponible');
   const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
@@ -3324,7 +3372,8 @@ async function downloadHumanVerified(entry){
   link.href=url;link.download='document-verifie-par-une-personne-'+
     String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+'.'+(entry.format||'bin');
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  drawerMessage('Document vérifié par une personne téléchargé. Le statut technique reste inchangé.');
+  if(options?.quiet)return;
+  drawerMessage('Document validé.','is-success');
 }
 async function assertDownloadStillCurrent(entry,expected){
   const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);

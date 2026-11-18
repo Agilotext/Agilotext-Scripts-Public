@@ -9,7 +9,7 @@ export const STATES = [
   { id: 'failed', label: 'Erreur de traitement', query: 'history&failedFixture' },
   { id: 'review-dense', label: 'Revue texte 370 passages', query: 'history&denseReview&newEditor', open: true },
   { id: 'review-pdf', label: 'Revue PDF, passages à placer', query: 'history&manualFixture&newEditor', open: true },
-  { id: 'review-validate-confirm', label: 'Valider en un clic, passages restants', query: 'history&denseReview&newEditor', open: true, click: [{ optional: /^Vérification$/ }, /^Valider ce document$/] },
+  { id: 'review-validate-confirm', label: 'Je valide, passages restants', query: 'history&denseReview&newEditor', open: true },
   { id: 'ready-open', label: 'Document prêt ouvert', query: 'history&compareFixtures&newEditor', open: true },
   { id: 'no-account', label: 'Session absente', query: 'noAccount' },
   { id: 'modal-types', label: 'Réglages (catégories et termes)', query: 'lists', click: /^Modifier$/ },
