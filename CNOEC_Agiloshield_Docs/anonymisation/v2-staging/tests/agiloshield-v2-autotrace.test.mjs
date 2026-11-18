@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { itemViewportRect, multiplyTransform, rectsOnPage } from '../agiloshield-v2-autotrace.js';
+import { itemViewportRect, maskPublishDecision, multiplyTransform, rectsOnPage } from '../agiloshield-v2-autotrace.js';
 import { regionRectangles } from '../agiloshield-v2-location.js';
 
 // PDF user space is bottom-left. Viewport scale 1 flips Y: [1, 0, 0, -1, 0, height].
@@ -73,3 +73,23 @@ assert.ok(phraseWidth < 80, 'the box does not cover the whole line: ' + phraseWi
 assert.ok(phraseWidth > 20, 'the box still covers the word: ' + phraseWidth);
 
 console.log('autotrace: PASS');
+
+const absent = maskPublishDecision({ textHits: 0, knownRects: 0 });
+assert.equal(absent.publish, false);
+assert.equal(absent.link, null);
+const several = maskPublishDecision({ textHits: 2, knownRects: 0 });
+assert.equal(several.publish, false);
+const oneText = maskPublishDecision({ textHits: 1, knownRects: 0 });
+assert.equal(oneText.publish, true);
+assert.equal(oneText.link, 'text');
+const oneBox = maskPublishDecision({ textHits: 0, knownRects: 1 });
+assert.equal(oneBox.publish, true);
+assert.equal(oneBox.link, 'known');
+const both = maskPublishDecision({ textHits: 1, knownRects: 1 });
+assert.equal(both.publish, true);
+assert.equal(both.link, null);
+const logo = maskPublishDecision({ textHits: 0, knownRects: 1, visual: true });
+assert.equal(logo.publish, true);
+assert.equal(logo.link, 'known');
+const logoMissing = maskPublishDecision({ visual: true });
+assert.equal(logoMissing.publish, false);

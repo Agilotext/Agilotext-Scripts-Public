@@ -119,3 +119,15 @@ export function rectsOnPage(items, viewportTransform, pageSize, needle) {
   }
   return rects.length ? { ok: true, rects } : { ok: false, reason: 'none', rects: [] };
 }
+
+export function maskPublishDecision({ textHits = 0, knownRects = 0, visual = false } = {}) {
+  const hits = Number(textHits) || 0;
+  const known = Number(knownRects) || 0;
+  if (visual) return known === 1
+    ? { publish: true, link: 'known' }
+    : { publish: false, link: null };
+  if (hits === 1 && known === 1) return { publish: true, link: null };
+  if (hits === 1) return { publish: true, link: 'text' };
+  if (known === 1) return { publish: true, link: 'known' };
+  return { publish: false, link: null };
+}

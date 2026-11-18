@@ -4,7 +4,7 @@ import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 import { originalPdfLocation, regionRectangles } from './agiloshield-v2-location.js';
-import { rectsOnPage, normalizeSearch } from './agiloshield-v2-autotrace.js';
+import { maskPublishDecision, rectsOnPage, normalizeSearch } from './agiloshield-v2-autotrace.js';
 import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
 import { iconSvg } from './agiloshield-v2-icons.js';
 
@@ -109,7 +109,8 @@ const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par 
   'L’aperçu PDF met trop de temps à s’afficher. Réessayez, ou téléchargez le fichier.',
   'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.']);
 const needsLinkedRegion = error => error?.code==='NEW_MASK_REQUIRES_LINKED_REGION' ||
-  String(error?.message||'').includes('NEW_MASK_REQUIRES_LINKED_REGION');
+  String(error?.message||'').includes('NEW_MASK_REQUIRES_LINKED_REGION') ||
+  String(error?.message||'').toLowerCase().includes('emplacement unique');
 const conflictsWithKeptMask = error => error?.code==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT' ||
   String(error?.message||'').includes('KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT');
 const apiSentence = error => {
@@ -2271,13 +2272,13 @@ async function cachedOriginPdf(entry){
   entry.originPdf=pdf;entry.originPdfJob=String(entry.jobId);
   return pdf;
 }
-async function passageBoxes(entry,row,{search=false}={}){
+async function passageBoxes(entry,row,{search=false,forceSearch=false}={}){
   const pageNumber=Number(row?.page);
   const known=regionRectangles(entry,row);
   const located=Number.isInteger(pageNumber)&&pageNumber>=1
     ?known.filter(box=>box.page===pageNumber):known;
-  if(located.length)return {ok:true,rects:located,source:'server'};
-  if(!search)return {ok:false,reason:'none',rects:[]};
+  if(located.length&&!forceSearch)return {ok:true,rects:located,source:'server'};
+  if(!search&&!forceSearch)return {ok:false,reason:'none',rects:[]};
   if(!Number.isInteger(pageNumber)||pageNumber<1)return {ok:false,reason:'none',rects:[]};
   const text=row?.text||row?.surface||'';
   if(normalizeSearch(text).replace(/[^0-9a-z]/g,'').length<3)return {ok:false,reason:'short',rects:[]};
@@ -2311,8 +2312,9 @@ async function settleSkippedZone(entry,action,zone,revision){
       throw error;
     }
   }
-  const found=await passageBoxes(entry,row);
-  if(!found.ok)return {revision:entry.revision,changed:false,traced:0,forced:false,left:true};
+  let found=await passageBoxes(entry,row);
+  if(found.rects.length!==1)found=await passageBoxes(entry,row,{forceSearch:true});
+  if(found.rects.length!==1)return {revision:entry.revision,changed:false,traced:0,forced:false,left:true};
   const reason=row.category==='ORG'?'human_confirmed_private_org':'human_added';
   const decision=await postDecision(entry,occurrenceId,'MASK',reason);
   noteDecision(entry,occurrenceId,'MASK',decision.revision);
@@ -2360,13 +2362,14 @@ function revealPassage(entry,row){
     renderPreview(entry).catch(showError);
   }).catch(showError);
 }
-async function applyBatchDecision(entry,action){
+async function applyBatchDecision(entry,action,options={}){
   releaseTrace(entry);
   const before=entry.revision;
   let handedOff=false;
   const modal=reviewModal((box,close,overlay)=>{
     overlay.dataset.closable='false';
-    el('h3',action==='MASK'?copy.review.batch.maskAll:copy.review.batch.keepAll,null,box);
+    const title=options.fromValidation?copy.review.checkTitle:(action==='MASK'?copy.review.batch.maskAll:copy.review.batch.keepAll);
+    el('h3',title,null,box);
     el('p',copy.review.applying,'asv2-validate-progress-label',box);
   });
   entry.batchRunning=true;entry.commandBusy=true;renderFooter(entry);
@@ -2374,17 +2377,22 @@ async function applyBatchDecision(entry,action){
     if(entry.format==='pdf')await cachedOriginPdf(entry).catch(()=>{});
     const receipt=await api.decideAll(entry.jobId,entry.digest,{revision:entry.revision,action});
     modal.close();
-    return await finishGroupedDecision(entry,receipt,action);
+    return await finishGroupedDecision(entry,receipt,action,options);
   }catch(error){
     modal.close();
     if(batchOpUnsupported(error,before)){handedOff=true;return applyStackedBatch(entry,action);}
+    if(needsLinkedRegion(error)){
+      drawerMessage(copy.review.batch.stillManual(1),'is-info');
+      await loadCurrent(entry).catch(()=>{});
+      return 'needs-zone';
+    }
     if(error?.status===409&&error?.code==='REVIEW_RESULT_PENDING'){
       drawerMessage(copy.review.batch.pendingStuck,'is-warning');
       await loadCurrent(entry).catch(()=>{});
-      return false;
+      return 'failed';
     }
     await reloadReviewError(entry,error);
-    return false;
+    return 'failed';
   }finally{
     if(!handedOff){entry.batchRunning=false;entry.commandBusy=false;renderFooter(entry);}
   }
@@ -2400,7 +2408,31 @@ async function finishKeptBatch(entry){
   drawerMessage(copy.review.batch.notReady,'is-warning');
   return false;
 }
-async function finishGroupedDecision(entry,receipt,action){
+async function publicationPlace(entry,row){
+  if(entry.format!=='pdf')return {publish:true,link:null,box:null};
+  const pageNumber=Number(row?.page);
+  const known=regionRectangles(entry,row).filter(box=>
+    !Number.isInteger(pageNumber)||pageNumber<1||box.page===pageNumber);
+  const visual=isVisualPassage(row);
+  let hits=0,textBox=null;
+  if(!visual){
+    const searched=await passageBoxes(entry,row,{forceSearch:true});
+    hits=searched.rects.length;
+    if(hits===1)textBox=searched.rects[0];
+  }
+  const decision=maskPublishDecision({textHits:hits,knownRects:known.length,visual});
+  const box=decision.link==='text'?textBox:(decision.link==='known'?known[0]:null);
+  return {publish:decision.publish,link:decision.link,box};
+}
+async function linkPassageBox(entry,occurrenceId,box,reason){
+  const region=await api.addLinkedRegion(entry.jobId,entry.digest,{
+    revision:entry.revision,page:box.page,rect:box.rect,occurrenceId,
+    sourceRevision:entry.review?.sourceRevision,documentId:entry.review?.documentId,reason});
+  if(!region?.revision)throw new Error('Réponse de masquage incomplète');
+  entry.revision=region.revision;
+  return region.revision;
+}
+async function finishGroupedDecision(entry,receipt,action,options={}){
   const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
   if(receipt?.revision)entry.revision=receipt.revision;
   if(action==='KEEP'){
@@ -2408,6 +2440,13 @@ async function finishGroupedDecision(entry,receipt,action){
     const closed=await finishKeptBatch(entry);
     if(!closed&&stayed)drawerMessage(copy.review.batch.mustStayMasked(stayed),'is-info');
     return closed;
+  }
+  const opened=reviewOccurrences(entry.review||{}).filter(row=>row.action==='REVIEW'||row.privacyAction==='REVIEW');
+  const blocking=skipped.filter(item=>skipCode(item)==='UNRESOLVED_MASK'||skipCode(item)==='LIST_PROBLEM');
+  if(blocking.length){
+    await loadCurrent(entry).catch(()=>{});
+    drawerMessage(validationStop(entry),'is-warning');
+    return 'needs-zone';
   }
   const zones=skipped.filter(item=>(skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'||skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT')&&item.occurrenceId);
   let revision=entry.revision;
@@ -2419,7 +2458,7 @@ async function finishGroupedDecision(entry,receipt,action){
     catch(error){
       if(error?.status===409&&error?.code==='REVIEW_RESULT_PENDING'){
         drawerMessage(copy.review.batch.pendingStuck,'is-warning');
-        return false;
+        return 'failed';
       }
       throw error;
     }
@@ -2433,7 +2472,30 @@ async function finishGroupedDecision(entry,receipt,action){
     await loadCurrent(entry).catch(()=>{});
     renderIssues(entry);
     drawerMessage(copy.review.batch.stillManual(left.length),'is-info');
-    return false;
+    return 'needs-zone';
+  }
+  const settled=new Set(zones.map(zone=>String(zone.occurrenceId)));
+  for(const row of opened){
+    if(settled.has(String(row.id)))continue;
+    const place=await publicationPlace(entry,row);
+    if(!place.publish){
+      markPlace(entry,row.id);
+      renderIssues(entry);
+      drawerMessage(copy.review.batch.stillManual(1),'is-info');
+      return 'needs-zone';
+    }
+    if(place.link&&place.box){
+      const reason=row.category==='ORG'?'human_confirmed_private_org':'human_added';
+      try{revision=await linkPassageBox(entry,row.id,place.box,reason);}
+      catch(error){
+        if(needsLinkedRegion(error)){
+          markPlace(entry,row.id);
+          drawerMessage(copy.review.batch.stillManual(1),'is-info');
+          return 'needs-zone';
+        }
+        throw error;
+      }
+    }
   }
   if(revision)await apply(entry,revision,{untilPublished:true});
   else await loadCurrent(entry).catch(()=>{});
@@ -2442,7 +2504,7 @@ async function finishGroupedDecision(entry,receipt,action){
   else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))
     drawerMessage(copy.review.batch.skippedConflict,'is-warning');
   if(entry.status==='READY')return true;
-  drawerMessage(copy.review.batch.notReady,'is-warning');
+  if(!options.fromValidation)drawerMessage(copy.review.batch.notReady,'is-warning');
   return false;
 }
 async function reloadReviewError(entry,error){
@@ -2573,7 +2635,27 @@ async function approveHumanReview(entry,control){
   renderFooter(entry);
   try{
     const work=remainingReviewWork(entry);
-    if(work.rows.length)await applyBatchDecision(entry,'MASK');
+    if(work.unresolved.length||work.problems.length){
+      drawerMessage(validationStop(entry),'is-warning');
+      return;
+    }
+    if(work.rows.length&&entry.format==='pdf'){
+      const missing=[];
+      for(const row of work.rows){
+        const place=await publicationPlace(entry,row);
+        if(!place.publish)missing.push(row);
+      }
+      if(missing.length){
+        for(const row of missing)markPlace(entry,row.id);
+        renderIssues(entry);
+        drawerMessage(copy.review.batch.stillManual(missing.length),'is-info');
+        return;
+      }
+    }
+    if(work.rows.length){
+      const closed=await applyBatchDecision(entry,'MASK',{fromValidation:true});
+      if(closed==='needs-zone'||closed==='failed')return;
+    }
     await loadCurrent(entry);
     if(!currentAccountEntry(entry))return;
     if(entry.status==='READY'){await deliverReady(entry);return;}
