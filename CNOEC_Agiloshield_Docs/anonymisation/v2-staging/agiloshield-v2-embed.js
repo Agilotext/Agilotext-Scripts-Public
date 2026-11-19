@@ -2712,11 +2712,27 @@ async function handleReviewError(entry,error,occurrenceId){
 async function decide(entry,occurrenceId,action,{fromUndo=false,applyNow=true}={}){
   if(entry.commandBusy)return null;
   entry.commandBusy=true;renderIssues(entry);
-  try{const receipt=await postDecision(entry,occurrenceId,action,fromUndo?'review_undo':'review_explicit');
+  try{
+    let place=null;
+    let reason='human_added';
+    if(action==='MASK'){
+      const row=passageRow(entry,occurrenceId,{id:occurrenceId});
+      reason=row.category==='ORG'?'human_confirmed_private_org':'human_added';
+      place=await publicationPlace(entry,row);
+      if(!place.publish){
+        markPlace(entry,occurrenceId);
+        renderIssues(entry);renderFooter(entry);
+        drawerMessage(copy.review.batch.stillManual(1),'is-info');
+        return {needsZone:true};
+      }
+    }
+    const receipt=await postDecision(entry,occurrenceId,action,fromUndo?'review_undo':'review_explicit');
     noteDecision(entry,occurrenceId,action,receipt.revision);
+    let revision=receipt.revision;
+    if(place?.link&&place.box)revision=await linkPassageBox(entry,occurrenceId,place.box,reason);
     renderIssues(entry);renderFooter(entry);
     if(!applyNow)return receipt;
-    await apply(entry,receipt.revision);
+    await apply(entry,revision);
     if(!fromUndo){
       entry.undoStack=entry.undoStack||[];
       entry.undoStack.push({kind:'decide',occurrenceId,action});
