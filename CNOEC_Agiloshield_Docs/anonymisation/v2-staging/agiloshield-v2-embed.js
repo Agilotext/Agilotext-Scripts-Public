@@ -1005,6 +1005,7 @@ function renderQueue(){
       if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
     }else if(['PENDING','PROCESSING'].includes(entry.status)){
       el('div',null,'asv2-processing-line',details);
+      el('span',copy.review.processingStay,'asv2-doc-meta',details);
     }else if(!entry.error){
       el('span',historySize(entry.sizeBytes??entry.file?.size),'asv2-doc-meta',details);
     }
@@ -1184,12 +1185,9 @@ function renderHistory(){
       buttonWithIcon('Vérifier','eye','asv2-primary asv2-doc-primary',acts,open);
     else button('Voir le détail','asv2-secondary asv2-doc-primary',acts,open);
     const items=[];
+    const failed=status==='FAILED'||status==='ERROR';
     if(status==='READY')items.push({label:'Voir le résultat',icon:'eye',run:open});
-    if(status==='REVIEW_REQUIRED'&&canDownload)
-      items.push({label:'Télécharger sans finir la vérification',icon:'download',run:()=>downloadHistoryRow(row).catch(fail)});
-    if(['READY','REVIEW_REQUIRED'].includes(status))
-      items.push({label:'Voir l’original (données en clair)',icon:'eye-slash',run:()=>openHistoryOriginal(row).catch(fail)});
-    if(row.processingMode==='PSEUDONYMIZE'){
+    if(row.processingMode==='PSEUDONYMIZE'&&!failed){
       const keyReady=pseudoReady&&(status==='READY'||
         (status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired));
       items.push({label:'Télécharger la clé',icon:'key',disabled:!keyReady,
@@ -1201,6 +1199,12 @@ function renderHistory(){
     if(attested)
       items.push({label:'Télécharger la copie vérifiée par une personne',icon:'shield-check',
         run:()=>downloadHistoryHuman(row).catch(fail)});
+    const late=[];
+    if(status==='REVIEW_REQUIRED'&&canDownload)
+      late.push({label:'Télécharger sans finir la vérification',icon:'download',run:()=>downloadHistoryRow(row).catch(fail)});
+    if(['READY','REVIEW_REQUIRED'].includes(status))
+      late.push({label:'Voir l’original (données en clair)',icon:'eye-slash',run:()=>openHistoryOriginal(row).catch(fail)});
+    if(late.length)items.push('separator',...late);
     items.push('separator',{label:'Retirer de cet écran',icon:'trash',danger:true,run:()=>removeEntryFromSession(row)});
     docMenu(acts,items,'Plus d’actions pour '+name);
   }
@@ -1454,10 +1458,10 @@ function failureText(job){
   const mapped=jobErrorMessage(job);
   if(mapped&&mapped!==copy.errors.failed)return mapped;
   const raw=job?.error;
-  if(raw&&typeof raw==='object')return raw.message||raw.code||mapped;
+  if(raw&&typeof raw==='object'&&typeof raw.message==='string'&&raw.message)return raw.message;
   if(typeof raw==='string'&&raw)return raw;
   if(typeof job?.errorMessage==='string'&&job.errorMessage)return job.errorMessage;
-  return mapped||'Le traitement a échoué.';
+  return copy.errors.engineFailed;
 }
 function noteTerminalFailure(entry, job, status){
   entry.applying=false;
@@ -1590,7 +1594,7 @@ async function loadCurrent(entry,{retryStale=true}={}){
     entry.report=null;entry.reportError=null;entry.pendingMask=null;
   }
   if(isTerminal(currentStatus)){entry.file=null;if(currentStatus==='FAILED')entry.pendingMask=null;}
-  entry.error=currentStatus==='FAILED'?jobErrorMessage(job):null;
+  entry.error=currentStatus==='FAILED'?failureText(job):null;
   if(currentStatus==='FAILED'){
     console.error('[AgiloShield V2] Le traitement du document a échoué côté serveur :', {
       jobId:entry.jobId, name:entry.name, status:currentStatus, error:extractJobError(job,entry.jobId), rawJob:job
@@ -1615,8 +1619,11 @@ async function loadCurrent(entry,{retryStale=true}={}){
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
   if(isTerminal(currentStatus)&&!entry.announcedComplete){
     entry.announcedComplete=true;
-    notify(entry.name+' : '+safeStatus(currentStatus)+'. Retrouvez ce fichier dans « '+
-      (state.capabilities.historyV2===true?copy.historyDurable:copy.historySession)+' ».');
+    const doneLine=currentStatus==='FAILED'||currentStatus==='ERROR'
+      ?(entry.error===copy.errors.leakFailed?entry.error:copy.errors.engineFailed)
+      :safeStatus(currentStatus)+'. Retrouvez ce fichier dans « '+
+        (state.capabilities.historyV2===true?copy.historyDurable:copy.historySession)+' ».';
+    notify(entry.name+' : '+doneLine,currentStatus==='FAILED'||currentStatus==='ERROR'?'is-error':'');
     updateLastDocCard(entry);
   }
 }
@@ -1626,12 +1633,15 @@ function setMobileTab(value){
 }
 function openDrawer(entry,{showOriginal=false}={}){
   if(!entry||!currentAccountEntry(entry))return;state.active=entry.key;
+  drawerMessage('');
   entry.previewKind=showOriginal?'origin':'anon';entry.focusId=null;
   entry.pageOnlyLocation=null;entry.target=null;
   try{const key=accountStorageKey(':drawer');if(key)sessionStorage.setItem(key,entry.key);}catch(_){}
   if(!state.drawerOpen){state.lastFocus=document.activeElement;drawer.hidden=false;state.drawerOpen=true;
     requestAnimationFrame(()=>drawer.classList.add('is-open'));document.body.classList.add('asv2-drawer-open');close.focus();}
   setMobileTab('doc');renderDrawer(entry);renderPreview(entry).catch(showError);
+  if(entry.status==='FAILED'||entry.status==='ERROR')
+    drawerMessage(entry.error===copy.errors.leakFailed?entry.error:copy.errors.engineFailed,'is-error');
 }
 function closeDrawer(){
   if(!state.drawerOpen)return;state.drawerOpen=false;drawer.classList.remove('is-open');
@@ -2090,11 +2100,6 @@ function renderIssues(entry){
   const rawReasons=review.qaReasons||review.reasons||[];
   const hiddenTechnicalSignals=rawReasons.length+
     (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
-  if(!progress.remaining&&hiddenTechnicalSignals&&review.canApproveHumanVerification===false&&review.humanVerifiedDeliverable!==true){
-    const note=el('div',null,'asv2-review-safety-note',issuesContent);
-    el('strong','Document non prêt',null,note);
-    el('p',copy.review.batch.heldByServer,'asv2-muted',note);
-  }
 
   const allRows=reviewOccurrences(review);
   const masked=allRows.filter(r=>(r.action||r.privacyAction)==='MASK');
@@ -2155,11 +2160,8 @@ function renderFooter(entry){
     const safety=el('p',null,'asv2-review-safety',drawerFooter);
     svgIcon('shield-check',safety,18);
     const attested=entryAttested(entry);
-    el('span',attested?copy.review.validatedAgain:
-      work.rows.length?copy.review.pendingLine(work.rows.length):
-      work.unresolved.length?copy.review.batch.blockedZones(work.unresolved.length)+'.':
-      work.problems.length?copy.review.batch.blockedRules(work.problems.length)+'.':
-      copy.review.safetyLine,null,safety);
+    const promise=entry.mode==='ANONYMIZE'?copy.review.validatePromiseFile:copy.review.validatePromise;
+    el('span',attested?copy.review.validatedAgain:promise,null,safety);
     if(editorCapabilities.humanVerification||attested){
       const validate=buttonWithIcon(attested?'Télécharger':copy.review.validate,
         attested?'download':'shield-check','asv2-primary',drawerFooter,
@@ -2196,7 +2198,7 @@ function guideToPendingReview(entry){
       copy.review.batch.serverBlocked,'is-warning');
     return;
   }
-  drawerMessage(copy.review.batch.heldByServer,'is-warning');
+  drawerMessage(copy.review.validatePromise,'is-info');
 }
 function reviewModal(build){
   const overlay=el('div',null,'asv2-validate-overlay',panel);
@@ -2626,6 +2628,37 @@ async function deliverValidated(entry){
   drawerMessage('Document validé.','is-success');
   notify('Document validé.');
 }
+function hasKnownLeak(entry){
+  const blockers=Array.isArray(entry.review?.humanVerificationBlockers)?entry.review.humanVerificationBlockers:[];
+  return blockers.includes('known_leak_or_missing_transform');
+}
+async function maskWhenEveryPlaceIsKnown(entry){
+  try{
+    const work=remainingReviewWork(entry);
+    if(!work.rows.length||work.unresolved.length||work.problems.length)return;
+    const places=[];
+    if(entry.format==='pdf'){
+      for(const row of work.rows){
+        const place=await publicationPlace(entry,row);
+        if(!place.publish)return;
+        places.push({row,place});
+      }
+    }
+    for(const item of places){
+      if(!(item.place.link&&item.place.box))continue;
+      const reason=item.row.category==='ORG'?'human_confirmed_private_org':'human_added';
+      await linkPassageBox(entry,item.row.id,item.place.box,reason);
+    }
+    const receipt=await api.decideAll(entry.jobId,entry.digest,{revision:entry.revision,action:'MASK'});
+    if(receipt?.revision)entry.revision=receipt.revision;
+    const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
+    const unsafe=skipped.some(item=>['UNRESOLVED_MASK','LIST_PROBLEM','NEW_MASK_REQUIRES_LINKED_REGION'].includes(skipCode(item)));
+    if(unsafe||!entry.revision)return;
+    await apply(entry,entry.revision,{untilPublished:true});
+  }catch(error){
+    if(error?.status===401||error?.status===403)throw error;
+  }
+}
 async function approveHumanReview(entry,control){
   if(entry.commandBusy||entry.batchRunning||entry.validating)return;
   if(entry.status==='READY'){await deliverReady(entry);return;}
@@ -2634,46 +2667,30 @@ async function approveHumanReview(entry,control){
   if(control?.isConnected)control.disabled=true;
   renderFooter(entry);
   try{
-    const work=remainingReviewWork(entry);
-    if(work.unresolved.length||work.problems.length){
-      drawerMessage(validationStop(entry),'is-warning');
+    if(hasKnownLeak(entry)){
+      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');
       return;
     }
-    if(work.rows.length&&entry.format==='pdf'){
-      const missing=[];
-      for(const row of work.rows){
-        const place=await publicationPlace(entry,row);
-        if(!place.publish)missing.push(row);
-      }
-      if(missing.length){
-        for(const row of missing)markPlace(entry,row.id);
-        renderIssues(entry);
-        drawerMessage(copy.review.batch.stillManual(missing.length),'is-info');
-        return;
-      }
-    }
-    if(work.rows.length){
-      const closed=await applyBatchDecision(entry,'MASK',{fromValidation:true});
-      if(closed==='needs-zone'||closed==='failed')return;
-    }
-    await loadCurrent(entry);
+    await maskWhenEveryPlaceIsKnown(entry);
+    await loadCurrent(entry).catch(()=>{});
     if(!currentAccountEntry(entry))return;
+    if(hasKnownLeak(entry)){
+      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');
+      return;
+    }
     if(entry.status==='READY'){await deliverReady(entry);return;}
     if(entryAttested(entry)){await deliverValidated(entry);return;}
-    const after=remainingReviewWork(entry);
-    if(after.rows.length||after.unresolved.length||after.problems.length){
-      drawerMessage(validationStop(entry),'is-warning');
+    try{
+      await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks:{
+        names:true,addresses:true,phones:true,identifiers:true,
+        logos_images:true,visual_regions:true,original_vs_final_all_pages:true}});
+    }catch(error){
+      if(error?.status===401||error?.status===403)throw error;
+      drawerMessage('L’attestation n’a pas été confirmée.','is-warning');
       return;
     }
-    if(entry.review?.canApproveHumanVerification!==true){
-      drawerMessage(validationStop(entry),'is-warning');
-      return;
-    }
-    await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks:{
-      names:true,addresses:true,phones:true,identifiers:true,
-      logos_images:true,visual_regions:true,original_vs_final_all_pages:true}});
     await loadCurrent(entry);
-    if(entry.review?.humanVerifiedDeliverable===true){await deliverValidated(entry);return;}
+    if(entry.review?.humanVerifiedDeliverable===true||entryAttested(entry)){await deliverValidated(entry);return;}
     drawerMessage('L’attestation n’a pas été confirmée.','is-warning');
   }finally{
     entry.validating=false;
