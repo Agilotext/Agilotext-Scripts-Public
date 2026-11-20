@@ -5,7 +5,7 @@ import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 import { originalPdfLocation, regionRectangles } from './agiloshield-v2-location.js';
 import { maskPublishDecision, rectsOnPage, normalizeSearch } from './agiloshield-v2-autotrace.js';
-import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
+import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural, queueProcessingLines, unprocessedPagesNotice } from './agiloshield-v2-copy.js';
 import { iconSvg } from './agiloshield-v2-icons.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
@@ -523,6 +523,7 @@ const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
 el('span','AgiloShield','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
+const pagesLeftNotice=el('p','','asv2-meta asv2-pages-left',drawerHeading);pagesLeftNotice.hidden=true;
 const drawerStatus=el('span',null,'asv2-drawer-status',drawerHeading);
 const reviewTools=el('div',null,'asv2-review-tools',drawerHead);
 const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
@@ -1005,7 +1006,8 @@ function renderQueue(){
       if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
     }else if(['PENDING','PROCESSING'].includes(entry.status)){
       el('div',null,'asv2-processing-line',details);
-      el('span',copy.review.processingStay,'asv2-doc-meta',details);
+      const lines=queueProcessingLines(entry.pageProgress);
+      lines.forEach((line,index)=>el('span',line,'asv2-doc-meta'+(lines.length>1&&index===0?' asv2-page-progress':''),details));
     }else if(!entry.error){
       el('span',historySize(entry.sizeBytes??entry.file?.size),'asv2-doc-meta',details);
     }
@@ -1484,6 +1486,8 @@ async function pollEntry(entry,{intervalMs,expectRevision,untilPublished}={}){
     const job=await limitedStatus(entry.jobId);assertDigest(entry,job);
     if(!currentAccountEntry(entry))return;
     entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
+    entry.pageProgress=['PENDING','PROCESSING'].includes(entry.status)?(job.progress||null):null;
+    entry.pagesUnprocessed=unprocessedPagesNotice(job.unprocessedUnits);
     const revisionReady=!expectRevision||String(job.reviewRevision)===String(expectRevision);
     const published=!untilPublished||(revisionReady&&job.workflowState!=='DIRTY');
     if(!isTerminal(entry.status))entry.hasCurrentResult=false;
@@ -1896,6 +1900,12 @@ function renderDrawer(entry){
   title.textContent=entry.name;
   meta.textContent=[entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'].filter(Boolean).join(' · ');
+  const showPagesLeft=Boolean(entry.pagesUnprocessed)&&
+    entry.status!=='FAILED'&&entry.status!=='ERROR'&&
+    entry.error!==copy.errors.leakFailed&&entry.error!==copy.errors.engineFailed&&
+    !hasKnownLeak(entry);
+  pagesLeftNotice.hidden=!showPagesLeft;
+  pagesLeftNotice.textContent=showPagesLeft?entry.pagesUnprocessed:'';
   clear(drawerStatus);
   statusPill(entry.status,drawerStatus,entryAttested(entry)?'Validé':undefined);
   clear(drawerDownloads);

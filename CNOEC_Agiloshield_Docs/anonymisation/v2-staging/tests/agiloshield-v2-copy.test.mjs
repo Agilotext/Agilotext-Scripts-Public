@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COPY, jobErrorMessage, plural } from '../agiloshield-v2-copy.js';
+import { COPY, jobErrorMessage, pageProgressLabel, plural, queueProcessingLines, unprocessedPagesNotice } from '../agiloshield-v2-copy.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -103,7 +103,7 @@ assert.ok(embed.includes('copy.review.validatePromise'), 'Je valide promises a v
 assert.equal(COPY.review.validatePromise, 'Je valide marque le document comme vérifié, puis vous donne le fichier et la clé.');
 assert.equal(COPY.review.validatePromiseFile, 'Je valide marque le document comme vérifié, puis vous donne le fichier.');
 assert.equal(COPY.review.processingStay, 'Le traitement continue. Vous pouvez laisser cette page ouverte.');
-assert.ok(embed.includes('copy.review.processingStay'), 'a running document says the page can stay open');
+assert.ok(embed.includes('queueProcessingLines(entry.pageProgress)'), 'a running document says the page can stay open');
 const approveStart=embed.indexOf('async function approveHumanReview');
 const approveEnd=embed.indexOf('async function undoLastReview');
 const approve=embed.slice(approveStart, approveEnd);
@@ -134,4 +134,28 @@ assert.ok(!embed.slice(keptStart, keptEnd).includes('settleSkippedZone'),
   'KEEP batch does not send a follow-up command');
 assert.equal(COPY.review.batch.nothingApplied, 'Le serveur n’a rien appliqué. Le document n’est pas validé.');
 assert.equal(COPY.errors.regionRefused, 'Le serveur a refusé la zone. Le document n’est pas validé.');
+
+assert.equal(pageProgressLabel(null), null);
+assert.equal(pageProgressLabel({ currentPage: 0, totalPages: 12 }), null);
+assert.equal(pageProgressLabel({ currentPage: 13, totalPages: 12 }), null);
+assert.equal(pageProgressLabel({ currentPage: 3 }), null);
+assert.equal(pageProgressLabel({ currentPage: '3', totalPages: 12 }), null);
+assert.equal(pageProgressLabel({ currentUnit: 3, totalUnits: 12 }), null);
+assert.equal(pageProgressLabel({ currentPage: 3, totalPages: 12 }), 'Page 3 sur 12');
+assert.deepEqual(queueProcessingLines({ currentPage: 3, totalPages: 12 }),
+  ['Page 3 sur 12', COPY.review.processingStay]);
+assert.deepEqual(queueProcessingLines(null), [COPY.review.processingStay]);
+assert.deepEqual(queueProcessingLines({ currentPage: 2, totalPages: 8 }),
+  ['Page 2 sur 8', COPY.review.processingStay]);
+assert.notEqual(queueProcessingLines({ currentPage: 2, totalPages: 8 })[0],
+  queueProcessingLines({ currentPage: 3, totalPages: 12 })[0]);
+assert.equal(unprocessedPagesNotice([]), null);
+assert.equal(unprocessedPagesNotice(null), null);
+assert.equal(unprocessedPagesNotice([{ unit: 4 }]), COPY.review.pagesUnprocessed);
+assert.ok(embed.includes('entry.pageProgress'), 'each queue row keeps its own progress');
+assert.ok(!embed.includes('state.pageProgress'), 'page progress is not global');
+assert.ok(embed.includes('copy.review.progress('), 'review passage counter stays');
+assert.ok(embed.includes("entry.uploadProgress+'%'"), 'upload percent stays');
+assert.ok(embed.includes('pagesLeftNotice'), 'unprocessed pages stay off the queue');
+assert.ok(!embed.includes('127.0.0.1:7689') && !embed.includes('__ASV2_PROBE'));
 console.log('copy: PASS');

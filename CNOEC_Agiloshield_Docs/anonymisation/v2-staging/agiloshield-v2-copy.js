@@ -52,6 +52,7 @@ export const COPY = Object.freeze({
     validatePromise: 'Je valide marque le document comme vérifié, puis vous donne le fichier et la clé.',
     validatePromiseFile: 'Je valide marque le document comme vérifié, puis vous donne le fichier.',
     processingStay: 'Le traitement continue. Vous pouvez laisser cette page ouverte.',
+    pagesUnprocessed: 'Certaines pages n’ont pas pu être traitées.',
     shortcuts: 'J suivant · K précédent · M masquer · V laisser visible · ⌘Z annuler · Échap fermer',
     readyToValidate: 'Document prêt à valider',
     pendingLine: n => plural(n, 'passage pas encore vérifié', 'passages pas encore vérifiés') + '. Vous pouvez valider en un clic.',
@@ -155,6 +156,25 @@ const errorCodeOf = job => {
   return null;
 };
 
+
+export function pageProgressLabel(progress) {
+  if (!progress || typeof progress !== 'object') return null;
+  const current = progress.currentPage;
+  const total = progress.totalPages;
+  if (!Number.isInteger(current) || !Number.isInteger(total)) return null;
+  if (total < 1 || current < 1 || current > total) return null;
+  return 'Page ' + current + ' sur ' + total;
+}
+
+export function queueProcessingLines(progress) {
+  const page = pageProgressLabel(progress);
+  const stay = COPY.review.processingStay;
+  return page ? [page, stay] : [stay];
+}
+
+export function unprocessedPagesNotice(units) {
+  return Array.isArray(units) && units.length > 0 ? COPY.review.pagesUnprocessed : null;
+}
 export function jobErrorMessage(job) {
   if (!job) return COPY.errors.failed;
   const reasons = [
