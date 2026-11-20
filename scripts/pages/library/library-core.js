@@ -112,6 +112,10 @@
         global.AgiloLibraryApi.hasCseAccess()) {
       return false;
     }
+    if (m.packJunior && global.AgiloLibraryApi && global.AgiloLibraryApi.hasJuniorAccess &&
+        global.AgiloLibraryApi.hasJuniorAccess()) {
+      return false;
+    }
     return !!(m.lockReasonCode || m.lockReasonMessage) && !m.canUse;
   }
 
@@ -146,9 +150,12 @@
     if (m.hasHtml) bits.push('<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>');
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
+    if (m.packJunior) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">Junior</span>');
     var csePaid = !!(global.AgiloLibraryApi && global.AgiloLibraryApi.hasCseAccess &&
       global.AgiloLibraryApi.hasCseAccess());
-    if ((m.lockReasonCode || m.lockReasonMessage) && !(m.packCse && csePaid)) {
+    var juniorPaid = !!(global.AgiloLibraryApi && global.AgiloLibraryApi.hasJuniorAccess &&
+      global.AgiloLibraryApi.hasJuniorAccess());
+    if ((m.lockReasonCode || m.lockReasonMessage) && !(m.packCse && csePaid) && !(m.packJunior && juniorPaid)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
     }
     return bits.join("");
@@ -159,7 +166,7 @@
     if (size) c.push("agilo-lib-card--" + size);
     if (locked(m)) c.push("agilo-lib-card--locked");
     if (m.isDefault) c.push("agilo-lib-card--default");
-    if (m.packCse) c.push("agilo-lib-card--pack");
+    if (m.packCse || m.packJunior) c.push("agilo-lib-card--pack");
     if (m.featured && size === "featured") c.push("agilo-lib-card--featured");
     return c.join(" ");
   }

@@ -58,14 +58,19 @@
       return Promise.all([
         global.AgiloLibraryApi.fetchLists(creds),
         global.AgiloLibraryApi.fetchMemberAccess(creds).catch(function () {
-          return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+          return { hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] };
         })
       ]).then(function (pair) {
         var pack = pair[0];
         var access = pair[1];
         if (global.AgiloLibraryApi.applyCseUnlock) {
           pack.models = global.AgiloLibraryApi.applyCseUnlock(pack.models, access);
-        } else if (global.AgiloLibraryApi.setMemberAccess) {
+        }
+        if (global.AgiloLibraryApi.applyJuniorUnlock) {
+          pack.models = global.AgiloLibraryApi.applyJuniorUnlock(pack.models, access);
+        }
+        if (!global.AgiloLibraryApi.applyCseUnlock && !global.AgiloLibraryApi.applyJuniorUnlock &&
+            global.AgiloLibraryApi.setMemberAccess) {
           global.AgiloLibraryApi.setMemberAccess(access);
         }
         mounted = true;

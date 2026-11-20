@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.6
+ * @version 1.5.8
  */
 (function (global) {
   "use strict";
@@ -18,7 +18,7 @@
   var AUTH_RELOAD_MSG = "Session expirée. Recharge la page.";
   var refreshInflight = null;
   var HIDDEN_OFFICIAL_IDS = { 7: true };
-  var memberAccess = { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+  var memberAccess = { hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] };
 
   function cfg() {
     var c = global.__AGILO_PROMPT_LIBRARY__ || {};
@@ -272,7 +272,7 @@
   function setMemberAccess(a) {
     memberAccess = a && typeof a === "object"
       ? a
-      : { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+      : { hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] };
     return memberAccess;
   }
 
@@ -282,6 +282,26 @@
 
   function hasCseAccess() {
     return !!(memberAccess && memberAccess.hasCse);
+  }
+
+  function hasJuniorAccess() {
+    return !!(memberAccess && memberAccess.hasJunior);
+  }
+
+  function applyJuniorUnlock(models, access) {
+    var paid = !!(access && access.hasJunior);
+    if (access) setMemberAccess(access);
+    return filterHiddenOfficial(models || []).map(function (m) {
+      if (!m || !m.packJunior || !paid) return m;
+      var copy = Object.assign({}, m);
+      copy.lockReasonCode = "";
+      copy.lockReasonMessage = "";
+      copy.lockedReason = "";
+      copy.canDuplicate = true;
+      copy.canCopyOfficial = true;
+      copy.requiresUserCopy = true;
+      return copy;
+    });
   }
 
   function applyCseUnlock(models, access) {
@@ -300,8 +320,17 @@
     });
   }
 
+  function isPackJuniorCard(m) {
+    if (!m || !cfg().library2Live) return false;
+    var types = typesList(m);
+    if (types.indexOf("junior") !== -1) return true;
+    var bt = String(m.businessType || m.business_type || "").toLowerCase();
+    return bt === "junior";
+  }
+
   function isPackCseCard(m) {
     if (!m || !cfg().library2Live) return false;
+    if (isPackJuniorCard(m)) return false;
     var types = typesList(m);
     if (types.indexOf("cse") !== -1) return true;
     var bt = String(m.businessType || m.business_type || "").toLowerCase();
@@ -329,6 +358,20 @@
     if (!raw) return 0;
     var n = Number(raw.acquiredPromptModelId);
     return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function isDressTranscript(raw) {
+    var meta = (raw && (raw.metadata || raw.userPromptModelMetadata || raw.user_prompt_model_metadata)) || {};
+    var v = raw && (raw.dressTranscript != null ? raw.dressTranscript
+      : raw.habillage != null ? raw.habillage
+      : raw.wrapStt != null ? raw.wrapStt
+      : raw.corpsMode != null ? raw.corpsMode
+      : meta.dressTranscript != null ? meta.dressTranscript
+      : meta.habillage != null ? meta.habillage
+      : meta.corpsMode);
+    if (v === true || v === 1 || v === "1" || v === "true") return true;
+    if (typeof v === "string" && /^(habillage|stt|transcript|dress)$/i.test(v.trim())) return true;
+    return false;
   }
 
   function normalizeCard(raw, defaultId) {
@@ -394,6 +437,8 @@
       allowedSubscriptionTypes: typesList(raw),
       businessType: String(raw.businessType || raw.business_type || ""),
       packCse: isPackCseCard(raw),
+      packJunior: isPackJuniorCard(raw),
+      dressTranscript: isDressTranscript(raw),
       displayOrder: Number(raw.displayOrder || raw.sortOrder || 0),
       sortOrder: Number(raw.sortOrder || raw.displayOrder || 0),
       featured: !!raw.featured,
@@ -765,7 +810,7 @@
   }
 
   function parseMemberAccess(res) {
-    if (!res || !res.ok) return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+    if (!res || !res.ok) return { hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] };
     var d = res.data || {};
     var sources = d.sources || d.approvedTypes || [];
     if (typeof sources === "string") sources = sources.split(",");
@@ -777,13 +822,19 @@
       return s.indexOf("cse") !== -1 || s.indexOf("pln_cse-") !== -1;
     });
     hasCse = hasCse || businessTypes.indexOf("cse") !== -1;
+    var hasJunior = businessTypes.indexOf("junior") !== -1;
+    hasJunior = hasJunior || sources.some(function (s) {
+      return s.indexOf("pln_junior10-") !== -1 || s.indexOf("pln_junior25-") !== -1;
+    });
     if (d.approvedSubscriptionTypes) {
       var t = d.approvedSubscriptionTypes;
       if (typeof t === "string") t = t.split(",");
       hasCse = hasCse || (t || []).some(function (x) { return String(x).toLowerCase() === "cse"; });
+      hasJunior = hasJunior || (t || []).some(function (x) { return String(x).toLowerCase() === "junior"; });
     }
     return {
       hasCse: hasCse,
+      hasJunior: hasJunior,
       noun: hasCse ? "PV" : "compte rendu",
       sources: sources,
       businessTypes: businessTypes,
@@ -794,7 +845,7 @@
   function fetchMemberAccess(creds) {
     var c = cfg();
     if (!c.library2Live) {
-      return Promise.resolve({ hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] });
+      return Promise.resolve({ hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] });
     }
     return withAuthRetryRes(creds, function (fresh) {
       return postJson(c.library2Base + "/member-access", authFields(fresh));
@@ -1130,9 +1181,10 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.6",
+    VERSION: "1.5.8",
     HIDDEN_OFFICIAL_IDS: HIDDEN_OFFICIAL_IDS,
     _normalizeCard: normalizeCard,
+    _isDressTranscript: isDressTranscript,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,
     isHiddenOfficial: isHiddenOfficial,
@@ -1140,7 +1192,9 @@
     setMemberAccess: setMemberAccess,
     getMemberAccess: getMemberAccess,
     hasCseAccess: hasCseAccess,
+    hasJuniorAccess: hasJuniorAccess,
     applyCseUnlock: applyCseUnlock,
+    applyJuniorUnlock: applyJuniorUnlock,
     cfg: cfg,
     waitForCreds: waitForCreds,
     refreshCreds: refreshCreds,
@@ -1161,6 +1215,7 @@
     setPromptModelUserIcon: setPromptModelUserIcon,
     canSetUserIcon: canSetUserIcon,
     isPackCseCard: isPackCseCard,
+    isPackJuniorCard: isPackJuniorCard,
     getStatus: getStatus,
     waitPromptReady: waitPromptReady,
     modelId: modelId,
