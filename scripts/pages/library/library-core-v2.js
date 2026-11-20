@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.6
+ * @version 2.1.7
  */
 (function (global) {
   "use strict";
@@ -56,6 +56,7 @@
   }
 
   function showLockChrome(m) {
+    if (m && m.packJunior && Api().hasJuniorAccess && Api().hasJuniorAccess()) return false;
     return !!(locked(m) && !softenCopyLock(m));
   }
 
@@ -204,6 +205,7 @@
       (editable ? '<span class="agilo-lib-card__icon-edit" aria-hidden="true">' + svgIcon("pencil", 11) + "</span>" : "");
     var cat = ' data-cat="' + escapeHtml(m.categoryKey || (m.type === "USER" ? "custom" : "general")) + '"';
     if (m.packCse) cat += ' data-pack="cse"';
+    else if (m.packJunior) cat += ' data-pack="junior"';
     if (editable) {
       return '<button type="button" class="' + cls + '"' + cat + ' data-act="icon" aria-label="Changer l’icône" title="Changer l’icône">' +
         inner + "</button>";
@@ -220,6 +222,7 @@
     if (m.hasHtml) bits.push('<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>');
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
+    if (m.packJunior) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">Junior</span>');
     if (!isReady(m)) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pending">' + svgIcon("clock", 12) + " En création</span>");
     if (showLockChrome(m) && (m.lockReasonCode || m.lockReasonMessage)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">' +
@@ -254,7 +257,7 @@
     var iconKey = Core.resolveIconKey(m && m.iconKey);
     return (
       '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" data-icon="' + escapeHtml(iconKey) + '"' +
-      (m.packCse ? ' data-pack="cse"' : "") +
+      (m.packCse ? ' data-pack="cse"' : (m.packJunior ? ' data-pack="junior"' : "")) +
       (showLockChrome(m) ? ' aria-disabled="true"' : "") + delay + ">" +
       preview +
       '<div class="agilo-lib-card__top">' +
@@ -285,7 +288,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.6",
+    VERSION: "2.1.7",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,
