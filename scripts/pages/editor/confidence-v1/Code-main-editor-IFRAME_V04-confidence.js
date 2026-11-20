@@ -2578,30 +2578,88 @@
   toolbar.btnReplAll?.addEventListener('click', replaceAll);
   toolbar.srch?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goto(-1) : goto(+1); } });
 
+  function ag_speakerName(seg) {
+    return String((seg && seg.speaker) || '').trim();
+  }
+  function ag_renameTargetIndices(segments, scope, oldName, idx) {
+    const list = Array.isArray(segments) ? segments : [];
+    const target = String(oldName || '').trim();
+    const at = Number(idx);
+    const same = (s) => ag_speakerName(s) === target;
+    if (scope === 'one') return (at >= 0 && at < list.length) ? [at] : [];
+    if (scope === 'contiguous') {
+      if (!(at >= 0 && at < list.length)) return [];
+      let start = at;
+      let end = at;
+      while (start - 1 >= 0 && same(list[start - 1])) start--;
+      while (end + 1 < list.length && same(list[end + 1])) end++;
+      const out = [];
+      for (let i = start; i <= end; i++) out.push(i);
+      return out;
+    }
+    if (scope === 'all') {
+      const out = [];
+      list.forEach((s, i) => { if (same(s)) out.push(i); });
+      return out;
+    }
+    if (scope === 'forward') {
+      if (!(at >= 0 && at < list.length)) return [];
+      const out = [];
+      for (let i = at; i < list.length; i++) if (same(list[i])) out.push(i);
+      return out;
+    }
+    if (scope === 'empty') {
+      const out = [];
+      list.forEach((s, i) => { if (!ag_speakerName(s)) out.push(i); });
+      return out;
+    }
+    return [];
+  }
+  function ag_clocksAllZero(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    if (list.length <= 1) return false;
+    return list.every((s) => {
+      const n = Number(s && s.start);
+      return !Number.isFinite(n) || n === 0;
+    });
+  }
+  function ag_formatClock(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const HH = String(h).padStart(2, '0');
+    const MM = String(m).padStart(2, '0');
+    const SS = String(sec).padStart(2, '0');
+    return h ? HH + ':' + MM + ':' + SS : MM + ':' + SS;
+  }
+  function ag_forwardMenuLabel(segments, idx) {
+    const base = 'De ce passage jusqu’à la fin';
+    if (ag_clocksAllZero(segments)) return base;
+    const list = Array.isArray(segments) ? segments : [];
+    const start = Number(list[idx] && list[idx].start);
+    if (!Number.isFinite(start)) return base;
+    return 'De ce passage (' + ag_formatClock(start) + ') jusqu’à la fin';
+  }
+  function ag_shouldOfferForward(segments, oldName, idx) {
+    const forward = ag_renameTargetIndices(segments, 'forward', oldName, idx).length;
+    const total = ag_renameTargetIndices(segments, 'all', oldName, idx).length;
+    return forward >= 2 && forward < total;
+  }
   function ag_countOccurrencesByName(name) {
     const target = String(name || '').trim();
     return window._segments.reduce((n, s) => n + (+((s.speaker || '').trim() === target)), 0);
   }
   function ag_contiguousRangeFrom(idx, name) {
-    const target = String(name || '').trim();
-    let start = idx, end = idx;
-    while (start - 1 >= 0 && (String(window._segments[start - 1].speaker || '').trim() === target)) start--;
-    while (end + 1 < window._segments.length && (String(window._segments[end + 1].speaker || '').trim() === target)) end++;
-    return { start, end, count: Math.max(0, end - start + 1) };
+    const range = ag_renameTargetIndices(window._segments, 'contiguous', name, idx);
+    if (!range.length) return { start: idx, end: idx, count: 0 };
+    return { start: range[0], end: range[range.length - 1], count: range.length };
   }
   function ag_applyRenameScope({ scope, oldName, newName, idx, indices = [] }) {
     const root = editors.transcript; if (!root) return 0;
-    const targets = [];
-    if (scope === 'one') targets.push(idx);
-    else if (scope === 'selected') targets.push(...indices);
-    else if (scope === 'contiguous') {
-      const { start, end } = ag_contiguousRangeFrom(idx, oldName);
-      for (let i = start; i <= end; i++) targets.push(i);
-    } else if (scope === 'all') {
-      window._segments.forEach((s, i) => { if ((s.speaker || '').trim() === String(oldName || '').trim()) targets.push(i); });
-    } else if (scope === 'empty') {
-      window._segments.forEach((s, i) => { if (!String(s.speaker || '').trim()) targets.push(i); });
-    }
+    const targets = scope === 'selected'
+      ? indices.slice()
+      : ag_renameTargetIndices(window._segments, scope, oldName, idx);
     const max = getSegList(root).length;
     const unique = Array.from(new Set(targets)).filter(i => i >= 0 && i < max);
     if (scope === 'selected' && unique.length !== indices.length) return 0;
@@ -2746,6 +2804,7 @@
     const rows = [];
     rows.push(mk('Ce segment uniquement', 'one'));
     if (!forEmpty && counts.contig > 1) rows.push(mk('Ce groupe continu', 'contiguous', `${counts.contig} seg.`));
+    if (!forEmpty && counts.offerForward) rows.push(mk(counts.forwardLabel, 'forward', `${counts.forward} seg.`));
     if (!forEmpty && counts.total > 1) rows.push(mk(`Toutes les occurrences de "${oldName}"`, 'all', `${counts.total} seg.`));
     if (forEmpty && counts.empty > 1) rows.push(mk('Tous les segments sans nom', 'empty', `${counts.empty} seg.`));
     if (rows.length === 1) rows.push(mk(forEmpty ? 'Tous les segments sans nom' : 'Toutes les occurrences', forEmpty ? 'empty' : 'all'));
@@ -3056,8 +3115,6 @@
 
     const selectedCount = selectionMode?.count || 0;
     const person = isPersonNameLabel(currentName);
-    const spellCount = person ? ag_countOccurrencesByName(currentName) : 0;
-    let applyAllBox = null;
     let nameInput = null;
     const spell = (selectionMode || person) ? document.createElement('div') : null;
     if (spell) {
@@ -3073,19 +3130,6 @@
       nameInput.value = currentName;
       nameInput.setAttribute('aria-label', 'Nom');
       nameInput.placeholder = 'Nom';
-      const row = document.createElement('label');
-      row.className = 'ag-speaker-picker__spell-all';
-      if (!selectionMode) {
-        applyAllBox = document.createElement('input');
-        applyAllBox.type = 'checkbox';
-        applyAllBox.checked = true;
-        const cap = document.createElement('span');
-        cap.textContent = spellCount > 1
-          ? 'Toutes les prises de parole (' + spellCount + ')'
-          : 'Ce segment';
-        row.appendChild(applyAllBox);
-        row.appendChild(cap);
-      }
       const go = document.createElement('button');
       go.type = 'button';
       go.className = 'ag-speaker-picker__spell-go';
@@ -3094,16 +3138,14 @@
         if (ev) { ev.preventDefault(); ev.stopPropagation(); }
         const joined = String(nameInput.value || '').trim();
         if (!joined || joined === currentName) { close(true); return; }
-        const scope = selectionMode ? 'selected' : ((applyAllBox && applyAllBox.checked && spellCount > 1) ? 'all' : 'one');
         close(false);
-        if (typeof onPick === 'function') onPick(joined, scope);
+        if (typeof onPick === 'function') onPick(joined, selectionMode ? 'selected' : undefined);
       }
       go.addEventListener('click', validateSpell);
       nameInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
       nameInput.addEventListener('focus', () => { try { nameInput.select(); } catch { } });
       spell.appendChild(title);
       spell.appendChild(nameInput);
-      if (!selectionMode) spell.appendChild(row);
       spell.appendChild(go);
     }
 
@@ -3155,16 +3197,11 @@
       if (!filterSpeakerRoster(allNames, q).length) return '';
       return q;
     }
-    function spellScope() {
-      if (selectionMode) return 'selected';
-      if (applyAllBox && applyAllBox.checked && spellCount > 1) return 'all';
-      return 'one';
-    }
     function applyCorrection(raw) {
       const n = normalizeName(raw);
       if (!n) return;
       close(false);
-      if (typeof onPick === 'function') onPick(n, spellScope());
+      if (typeof onPick === 'function') onPick(n, selectionMode ? 'selected' : undefined);
     }
 
     function visibleRows() {
@@ -3388,41 +3425,28 @@
       toast(
         scope === 'one' ? 'Locuteur mis à jour. Cliquez Sauvegarder.' :
           scope === 'contiguous' ? `Groupe renommé (${n} seg.). Cliquez Sauvegarder.` :
+            scope === 'forward' ? `De ce passage jusqu’à la fin (${n}). Cliquez Sauvegarder.` :
             scope === 'all' ? `Toutes les occurrences → « ${newName} » (${n}). Cliquez Sauvegarder.` :
               `Segments sans nom → « ${newName} » (${n}). Cliquez Sauvegarder.`
       );
     }
 
-    function afterNameChosen(rawName, presetScope) {
+    function afterNameChosen(rawName) {
       ag_closeSpeakerPicker();
     const newName = normalizeName(rawName);
     if (!newName || newName === oldName) return;
       pushStoredRoster(getJobIdForRoster(), newName);
 
-      if (presetScope === 'all' || presetScope === 'one') {
-        const total = oldName ? ag_countOccurrencesByName(oldName) : 0;
-        const scope = (presetScope === 'all' && total > 1) ? 'all' : 'one';
-        finishRename(scope, newName, { spellCorrection: true });
-        return;
-      }
-
     const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
+    const forwardTargets = ag_renameTargetIndices(window._segments, 'forward', oldName, idx);
     const counts = {
       total: oldName ? ag_countOccurrencesByName(oldName) : 0,
       contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
-      empty: emptyCount
+      empty: emptyCount,
+      forward: forwardTargets.length,
+      offerForward: !!oldName && ag_shouldOfferForward(window._segments, oldName, idx),
+      forwardLabel: ag_forwardMenuLabel(window._segments, idx)
     };
-
-    const shift = !!keyState.shift;
-    const alt = !!keyState.alt;
-
-    if (oldName) {
-        if (shift) { finishRename('all', newName); return; }
-        if (alt) { finishRename('contiguous', newName); return; }
-    } else if (renameAllEmpty) {
-        finishRename('empty', newName);
-      return;
-    }
 
     const forEmpty = !oldName;
     ag_showRenameMenu(anchor, {
@@ -4658,7 +4682,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.34-correction-copy';
+  window.__agiloEditorConfidenceVersion = '1.09.35-rename-forward';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 30 * 60 * 1000;
