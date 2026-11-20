@@ -12,6 +12,7 @@
 /* v8.8: compte @index-education.com, security-status avant mobile, invitation et CSE */
 /* v8.9: PostHog identify (id membre, édition, environnement). Pas d'e-mail. */
 /* v8.10: Business avant CSE pour PostHog. Un loginRedirect /app/free/ n'est pas un plan. */
+/* v8.11: pln_junior10- et pln_junior25- (mois ou année) → dashboard business. Pas le tag CSE. */
 /* Le helper scripts/shared/agilo-security-tenant.js doit être collé avant ce script. */
 /* ===================================================== */
 /* Déploiement Webflow : coller ce script sur la page /auth/post-login */
@@ -19,7 +20,7 @@
 (function (root) {
   "use strict";
 
-  const VERSION = "v8.10";
+  const VERSION = "v8.11";
   const API_BASE = "https://api.agilotext.com/api/v1";
   const FREE_PLAN_ID = "pln_free-njg10umr";
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
@@ -152,6 +153,10 @@
     return getPlans(member).some((p) => isPlanObjectActive(p) && matchesPrice(p));
   }
 
+  function hasJuniorPlan(member) {
+    return hasPlanPrefix(member, "pln_junior10-") || hasPlanPrefix(member, "pln_junior25-");
+  }
+
   function hasFreePlan(member) {
     if (hasPlanPrefix(member, "pln_free")) return true;
 
@@ -195,14 +200,16 @@
     const hasAgiloshield = hasAgiloshieldClassic(member);
     const hasBusiness = hasPlanPrefix(member, "pln_business");
     const hasCse = hasCsePlan(member);
+    const hasJunior = hasJuniorPlan(member);
     const hasPro = hasPlanPrefix(member, "pln_pro");
     const hasFree = hasFreePlan(member);
-    const hasTranscription = hasBusiness || hasCse || hasPro || hasFree || team.hasTeamMembership;
+    const hasTranscription = hasBusiness || hasCse || hasJunior || hasPro || hasFree || team.hasTeamMembership;
     return {
       hasLegacyAnon,
       hasAgiloshield,
       hasBusiness,
       hasCse,
+      hasJunior,
       hasPro,
       hasFree,
       hasTranscription,
@@ -216,11 +223,12 @@
     if (!onboardingDone) {
       return { targetRoute: "/auth/setup", decisionReason: "onboarding_incomplete" };
     }
-    if (signals.hasBusiness || signals.hasCse || signals.isSeat) {
+    if (signals.hasBusiness || signals.hasCse || signals.hasJunior || signals.isSeat) {
       var cseReason = "active_cse_plan";
       var reason = "team_seat_membership";
       if (signals.hasBusiness) reason = "active_business_plan";
       else if (signals.hasCse) reason = cseReason;
+      else if (signals.hasJunior) reason = "active_junior_plan";
       return {
         targetRoute: "/app/business/dashboard",
         decisionReason: reason
@@ -253,6 +261,7 @@
     if (!signals) return "free";
     if (signals.hasBusiness || signals.isSeat) return "business";
     if (signals.hasCse) return "cse";
+    if (signals.hasJunior) return "junior";
     if (signals.hasPro) return "pro";
     if (signals.hasFree) return "free";
     if (signals.hasAgiloshield || signals.hasLegacyAnon) return "agiloshield";
@@ -303,6 +312,7 @@
     hasPlanPrefix: hasPlanPrefix,
     hasFreePlan: hasFreePlan,
     hasCsePlan: hasCsePlan,
+    hasJuniorPlan: hasJuniorPlan,
     hasAgiloshieldClassic: hasAgiloshieldClassic,
     readPendingCsePrice: readPendingCsePrice,
     consumePendingCsePrice: consumePendingCsePrice,
@@ -635,6 +645,7 @@
       email: (member.auth && member.auth.email) || "",
       hasBusiness: signals.hasBusiness,
       hasCse: signals.hasCse,
+      hasJunior: signals.hasJunior,
       hasPro: signals.hasPro,
       hasFree: signals.hasFree,
       hasLegacyAnon: signals.hasLegacyAnon,
@@ -646,7 +657,7 @@
     });
 
     let edition = "free";
-    if (signals.hasBusiness || signals.hasCse || signals.isSeat) edition = "business";
+    if (signals.hasBusiness || signals.hasCse || signals.hasJunior || signals.isSeat) edition = "business";
     else if (signals.hasPro) edition = "pro";
     else if (signals.hasFree) edition = "free";
     else if (signals.hasLegacyAnon) edition = "anonymisation";
@@ -668,7 +679,7 @@
 
           const features = {
             anonymisation: signals.hasLegacyAnon || signals.hasAgiloshield,
-            exports: signals.hasPro || signals.hasBusiness || signals.hasCse || signals.isSeat,
+            exports: signals.hasPro || signals.hasBusiness || signals.hasCse || signals.hasJunior || signals.isSeat,
             isSeat: signals.isSeat,
             isOwner: signals.isOwner
           };
@@ -759,6 +770,7 @@
       planConnections: summarizePlanConnections(member),
       hasBusiness: signals.hasBusiness,
       hasCse: signals.hasCse,
+      hasJunior: signals.hasJunior,
       hasPro: signals.hasPro,
       hasFree: signals.hasFree,
       hasLegacyAnon: signals.hasLegacyAnon,
