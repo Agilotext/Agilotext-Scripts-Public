@@ -1,6 +1,6 @@
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
   v2Capabilities, assertCreatedJob, currentResultAvailable,
-  assertPreviewHeaders } from './agiloshield-v2-client.js';
+  assertPreviewHeaders, selectedValidationResult } from './agiloshield-v2-client.js';
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 import { originalPdfLocation, regionRectangles } from './agiloshield-v2-location.js';
@@ -92,12 +92,16 @@ const accountStorageKey = suffix => state.accountRef?
   storageKey+':'+encodeURIComponent(state.accountRef)+suffix:null;
 const canDownloadResult = entry => Boolean(entry?.hasCurrentResult &&
   ['READY','REVIEW_REQUIRED'].includes(entry.status));
+const validationFrame = entry => entry?.validationResult ||
+  (entry?.hasCurrentResult&&['READY','REVIEW_REQUIRED'].includes(entry.status)?
+    {revision:entry.revision,status:entry.status}:null);
 const canDownloadKey = entry => Boolean(entry?.mode==='PSEUDONYMIZE'&&pseudoReady&&
-  canDownloadResult(entry)&&(entry.status==='READY'||
-    (entry.status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired)));
+  ((entryAttested(entry)&&validationFrame(entry))||
+    (canDownloadResult(entry)&&(entry.status==='READY'||
+      (entry.status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired)))));
 // A review preview is a read-only view; Java independently checks whether a
 // downloadable artifact exists when /result or /download is requested.
-const canPreviewResult = entry => Boolean(entry?.hasCurrentResult &&
+const canPreviewResult = entry => Boolean((entry?.hasCurrentResult||validationFrame(entry)) &&
   ['pdf','txt','csv','docx'].includes(entry.format));
 const protectedVersionLabel = entry => entry.mode==='PSEUDONYMIZE'?
   'Version pseudonymisée':'Version anonymisée';
@@ -1148,8 +1152,7 @@ function renderHistory(){
   for(const row of rows){
     const status=historyStatus(row),name=row.fileName||row.filename||'Document';
     const sessionEntry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
-    const attested=status==='REVIEW_REQUIRED'&&(row.humanVerifiedDeliverable===true||
-      sessionEntry?.review?.humanVerifiedDeliverable===true);
+    const attested=row.humanVerifiedDeliverable===true||entryAttested(sessionEntry);
     const shown=status;
     const v2=source==='v2'&&!!row.jobId;
     const item=el('div',null,'asv2-doc is-'+shown.toLowerCase(),historyList);item.setAttribute('role','listitem');
@@ -1544,7 +1547,7 @@ async function loadCurrent(entry,{retryStale=true}={}){
     noteTerminalFailure(entry, job, currentStatus);return;
   }
   if(!hasReviewRevision(job)){
-    entry.status=currentStatus;entry.review=null;entry.regions=null;entry.error=null;
+    entry.status=currentStatus;entry.review=null;entry.regions=null;entry.validationResult=null;entry.hasValidationContract=false;entry.error=null;
     renderQueue();
     if(state.drawerOpen&&state.active===entry.key)renderDrawer(entry);
     return;
@@ -1592,9 +1595,18 @@ async function loadCurrent(entry,{retryStale=true}={}){
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
+  entry.hasValidationContract=Object.hasOwn(job||{},'validationResult')||Object.hasOwn(review||{},'validationResult');
+  entry.validationResult=selectedValidationResult(job,review);
+  for(const row of historyRows('v2')){
+    if(String(row.jobId)===String(entry.jobId)){
+      row.humanVerifiedDeliverable=review?.humanVerifiedDeliverable===true;
+      row.validationResult=entry.validationResult;
+    }
+  }
+  renderHistory();
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
     entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;
-    entry.previewKind=entry.hasCurrentResult?'anon':'origin';entry.page=1;
+    entry.previewKind=(entry.hasCurrentResult||entry.validationResult)?'anon':'origin';entry.page=1;
     entry.report=null;entry.reportError=null;entry.pendingMask=null;
   }
   if(isTerminal(currentStatus)){entry.file=null;if(currentStatus==='FAILED')entry.pendingMask=null;}
@@ -2165,7 +2177,7 @@ function renderFooter(entry){
   if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
   if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
     ()=>loadCurrent(entry).catch(showError));
-  if(entry.status==='REVIEW_REQUIRED'){
+  if(entry.status==='REVIEW_REQUIRED'||(entry.review?.workflowState==='DIRTY'&&validationFrame(entry))){
     const work=remainingReviewWork(entry);
     const safety=el('p',null,'asv2-review-safety',drawerFooter);
     svgIcon('shield-check',safety,18);
@@ -2175,7 +2187,7 @@ function renderFooter(entry){
     if(editorCapabilities.humanVerification||attested){
       const validate=buttonWithIcon(attested?'Télécharger':copy.review.validate,
         attested?'download':'shield-check','asv2-primary',drawerFooter,
-        ()=>(attested?deliverValidated(entry):approveHumanReview(entry,validate)).catch(showError));
+        ()=>approveHumanReview(entry,validate).catch(showError));
       validate.disabled=Boolean(entry.commandBusy)||Boolean(entry.batchRunning)||Boolean(entry.validating);
     }
     renderShortcutHelp(drawerFooter);
@@ -2610,7 +2622,7 @@ async function deliverReady(entry){
   catch(_){drawerMessage(copy.review.batch.downloadBlocked,'is-warning');}
 }
 function entryAttested(entry){
-  return entry?.status==='REVIEW_REQUIRED'&&entry.review?.humanVerifiedDeliverable===true;
+  return entry?.review?.humanVerifiedDeliverable===true&&Boolean(validationFrame(entry));
 }
 function markValidated(entry){
   if(entry.review)entry.review.humanVerifiedDeliverable=true;
@@ -2632,75 +2644,115 @@ function validationStop(entry){
   return blockers.length?'La validation ne peut pas partir.':'La validation ne peut pas partir.';
 }
 async function deliverValidated(entry){
-  await downloadHumanVerified(entry,{quiet:true});
-  if(canDownloadKey(entry))await downloadKey(entry,{skipConfirm:true,quiet:true});
+  if(!entryAttested(entry))throw new Error('Attestation indisponible');
   markValidated(entry);
-  drawerMessage('Document validé.','is-success');
-  notify('Document validé.');
+  try{
+    const pending=[downloadHumanVerified(entry,{quiet:true,defer:true})];
+    if(entry.mode==='PSEUDONYMIZE'){
+      if(!canDownloadKey(entry))throw new Error('Clé indisponible pour ce document');
+      pending.push(downloadKey(entry,{skipConfirm:true,quiet:true,defer:true}));
+    }
+    const downloads=await Promise.all(pending);
+    for(const item of downloads)await assertDownloadStillCurrent(entry,item.expected);
+    for(const item of downloads){
+      const url=URL.createObjectURL(item.blob),link=el('a',null,null,document.body);
+      link.href=url;link.download=item.filename;link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    }
+    drawerMessage('Document validé.','is-success');
+    notify('Document validé.');
+  }catch(error){
+    await loadCurrent(entry).catch(()=>{});
+    throw error;
+  }
 }
 function hasKnownLeak(entry){
   const blockers=Array.isArray(entry.review?.humanVerificationBlockers)?entry.review.humanVerificationBlockers:[];
   return blockers.includes('known_leak_or_missing_transform');
 }
 async function maskWhenEveryPlaceIsKnown(entry){
-  try{
-    const work=remainingReviewWork(entry);
-    if(!work.rows.length||work.unresolved.length||work.problems.length)return;
-    const places=[];
-    if(entry.format==='pdf'){
-      for(const row of work.rows){
-        const place=await publicationPlace(entry,row);
-        if(!place.publish)return;
-        places.push({row,place});
+  if(entry.review&&Object.hasOwn(entry.review,'reviewable')&&entry.review.reviewable===false)return;
+  if(!entry.hasValidationContract){
+    try{
+      const work=remainingReviewWork(entry);
+      if(!work.rows.length||work.unresolved.length||work.problems.length)return;
+      const places=[];
+      if(entry.format==='pdf'){
+        for(const row of work.rows){
+          const place=await publicationPlace(entry,row);
+          if(!place.publish)return;
+          places.push({row,place});
+        }
       }
+      for(const item of places){
+        if(!(item.place.link&&item.place.box))continue;
+        const reason=item.row.category==='ORG'?'human_confirmed_private_org':'human_added';
+        await linkPassageBox(entry,item.row.id,item.place.box,reason);
+      }
+      const receipt=await api.decideAll(entry.jobId,entry.digest,{revision:entry.revision,action:'MASK'});
+      if(receipt?.revision)entry.revision=receipt.revision;
+      const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
+      const unsafe=skipped.some(item=>['UNRESOLVED_MASK','LIST_PROBLEM','NEW_MASK_REQUIRES_LINKED_REGION'].includes(skipCode(item)));
+      if(unsafe||!entry.revision)return;
+      await apply(entry,entry.revision,{untilPublished:true});
+    }catch(error){
+      if(error?.status===401||error?.status===403)throw error;
     }
-    for(const item of places){
-      if(!(item.place.link&&item.place.box))continue;
-      const reason=item.row.category==='ORG'?'human_confirmed_private_org':'human_added';
-      await linkPassageBox(entry,item.row.id,item.place.box,reason);
-    }
-    const receipt=await api.decideAll(entry.jobId,entry.digest,{revision:entry.revision,action:'MASK'});
-    if(receipt?.revision)entry.revision=receipt.revision;
-    const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
-    const unsafe=skipped.some(item=>['UNRESOLVED_MASK','LIST_PROBLEM','NEW_MASK_REQUIRES_LINKED_REGION'].includes(skipCode(item)));
-    if(unsafe||!entry.revision)return;
-    await apply(entry,entry.revision,{untilPublished:true});
-  }catch(error){
-    if(error?.status===401||error?.status===403)throw error;
+    return;
   }
+  if(entry.review&&Object.hasOwn(entry.review,'workflowState')&&entry.review.workflowState!=='RESULT')return;
+  const work=remainingReviewWork(entry);
+  if(!work.rows.length)return;
+  if(entry.format==='pdf'){
+    for(const row of work.rows){
+      const place=await publicationPlace(entry,row);
+      if(!place.publish||!(place.link&&place.box))continue;
+      const reason=row.category==='ORG'?'human_confirmed_private_org':'human_added';
+      await linkPassageBox(entry,row.id,place.box,reason);
+    }
+  }
+  const receipt=await api.decideAll(entry.jobId,entry.digest,{
+    revision:entry.revision,action:'MASK',skipUnresolved:true});
+  if(receipt?.revision)entry.revision=receipt.revision;
+  if(receipt?.appliedCount>0)await apply(entry,entry.revision,{untilPublished:true});
 }
 async function approveHumanReview(entry,control){
   if(entry.commandBusy||entry.batchRunning||entry.validating)return;
-  if(entry.status==='READY'){await deliverReady(entry);return;}
-  if(entryAttested(entry)){await deliverValidated(entry);return;}
   entry.validating=true;
   if(control?.isConnected)control.disabled=true;
   renderFooter(entry);
   try{
+    const displayed=validationFrame(entry);
+    await loadCurrent(entry);
+    if(!currentAccountEntry(entry))return;
+    const current=validationFrame(entry);
+    if(displayed&&current&&String(displayed.revision)!==String(current.revision))
+      throw new Error(copy.errors.approvalStale);
+    if(entryAttested(entry)){await deliverValidated(entry);return;}
+    if(entry.status==='READY'){await deliverReady(entry);return;}
     if(hasKnownLeak(entry)){
-      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');
-      return;
+      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');return;
     }
     await maskWhenEveryPlaceIsKnown(entry);
-    await loadCurrent(entry).catch(()=>{});
+    await loadCurrent(entry);
     if(!currentAccountEntry(entry))return;
     if(hasKnownLeak(entry)){
-      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');
-      return;
+      drawerMessage('Un passage reste lisible. La validation ne part pas.','is-warning');return;
     }
     if(entry.status==='READY'){await deliverReady(entry);return;}
     if(entryAttested(entry)){await deliverValidated(entry);return;}
     try{
-      await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks:{
+      const target=validationFrame(entry);
+      if(!target)throw new Error('Aucun fichier produit disponible');
+      await api.approveHumanVerification(entry.jobId,entry.digest,{revision:target.revision,checks:{
         names:true,addresses:true,phones:true,identifiers:true,
         logos_images:true,visual_regions:true,original_vs_final_all_pages:true}});
     }catch(error){
       if(error?.status===401||error?.status===403)throw error;
-      drawerMessage('L’attestation n’a pas été confirmée.','is-warning');
-      return;
+      drawerMessage('L’attestation n’a pas été confirmée.','is-warning');return;
     }
     await loadCurrent(entry);
-    if(entry.review?.humanVerifiedDeliverable===true||entryAttested(entry)){await deliverValidated(entry);return;}
+    if(entryAttested(entry)){await deliverValidated(entry);return;}
     drawerMessage('L’attestation n’a pas été confirmée.','is-warning');
   }finally{
     entry.validating=false;
@@ -2853,20 +2905,23 @@ async function previewBytes(entry,kind){
   if(!entry.jobId)throw new Error('Document non déposé');
   if(kind==='anon'&&!canPreviewResult(entry))throw new Error('Aperçu du résultat indisponible');
   if(!entry.listDigest||!entry.revision)throw new Error('Empreinte ou révision du document manquante');
-  const expected={digest:entry.digest,listDigest:entry.listDigest,revision:entry.revision,
-    status:entry.status,mode:entry.mode,accountEpoch:state.accountEpoch};
-  // Java must identify the exact current preview; a subsequent status/review
-  // read also catches a revision changed while its bytes were transferred.
+  const frame=kind==='anon'?validationFrame(entry):null;
+  const expected={digest:entry.digest,listDigest:entry.listDigest,
+    revision:frame?.revision||entry.revision,status:frame?.status||entry.review?.status||entry.status,
+    mode:entry.mode,accountEpoch:state.accountEpoch};
   async function current(){
     const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
     assertDigest(entry,job);assertDigest(entry,review);
     if(!currentAccountEntry(entry)||state.accountEpoch!==expected.accountEpoch||
-      entry.revision!==expected.revision||entry.status!==expected.status||entry.mode!==expected.mode||
-      statusOf(job)!==expected.status||String(job.reviewRevision)!==String(expected.revision)||
-      String(review.revision)!==String(expected.revision)||
-      review.status!==expected.status||job.processingMode!==expected.mode||
-      review.processingMode!==expected.mode||job.workflowState!==review.workflowState||
-      (kind==='anon'&&!currentResultAvailable(job,review)))throw new Error(copy.errors.previewStale);
+       entry.mode!==expected.mode||job.processingMode!==expected.mode||review.processingMode!==expected.mode)
+      throw new Error(copy.errors.previewStale);
+    if(kind==='anon'){
+      const selected=selectedValidationResult(job,review);
+      if(!selected||selected.revision!==String(expected.revision)||selected.status!==expected.status)
+        throw new Error(copy.errors.previewStale);
+    }else if(String(job.reviewRevision)!==String(expected.revision)||
+       String(review.revision)!==String(expected.revision)||review.status!==expected.status||
+       job.workflowState!==review.workflowState)throw new Error(copy.errors.previewStale);
   }
   await current();
   const response=assertPreviewHeaders(await api.preview(entry.jobId,kind),{
@@ -3463,54 +3518,55 @@ async function download(entry,certified,options){
 }
 async function downloadKey(entry,options){
   if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
-  if(!canDownloadKey(entry))
-    throw new Error('Clé indisponible pour ce document');
-  const certified=entry.status==='READY';
+  if(!canDownloadKey(entry))throw new Error('Clé indisponible pour ce document');
+  const human=entryAttested(entry),frame=human?validationFrame(entry):null;
+  const status=frame?.status||entry.status,revision=frame?.revision||entry.revision;
+  const certified=status==='READY';
   if(!certified&&!options?.skipConfirm&&!await confirmAction('Cette clé appartient à un résultat non vérifié pouvant encore contenir des données sensibles. La télécharger quand même ?'))return;
-  const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
-    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
-  const response=await api.checkedArtifact(entry.jobId,{kind:'key',certified,expectedDigest:entry.digest,
-    expectedListDigest:entry.listDigest,expectedRevision:entry.revision,expectedMode:entry.mode});
+  const expected={status,revision,digest:entry.digest,listDigest:entry.listDigest,
+    mode:entry.mode,accountEpoch:state.accountEpoch,humanVerified:human};
+  const response=await api.checkedArtifact(entry.jobId,{kind:'key',certified,humanVerified:human,
+    expectedDigest:entry.digest,expectedListDigest:entry.listDigest,expectedRevision:revision,expectedMode:entry.mode});
   const blob=await response.blob();
+  const filename='cle-pseudonymes-'+(certified?'':'NON-VERIFIE-')+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
+    '-'+String(revision).replace(/[^A-Za-z0-9_-]/g,'')+'.properties';
+  if(options?.defer)return {blob,filename,expected};
   await assertDownloadStillCurrent(entry,expected);
-  const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
-  link.href=url;link.download='cle-pseudonymes-'+(certified?'':'NON-VERIFIE-')+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
-    '-'+String(entry.revision).replace(/[^A-Za-z0-9_-]/g,'')+'.properties';
-  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  if(options?.quiet)return;
-  drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
+  const url=URL.createObjectURL(blob),link=el('a',null,null,document.body);
+  link.href=url;link.download=filename;link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  if(!options?.quiet)drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
 }
 async function downloadHumanVerified(entry,options){
-  if(!currentAccountEntry(entry)||entry.status!=='REVIEW_REQUIRED'||
-      entry.review?.humanVerifiedDeliverable!==true)throw new Error('Attestation indisponible');
-  const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
-    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
+  if(!currentAccountEntry(entry)||!entryAttested(entry))throw new Error('Attestation indisponible');
+  const frame=validationFrame(entry);
+  const expected={status:frame.status,revision:frame.revision,digest:entry.digest,
+    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch,humanVerified:true};
   const response=await api.checkedArtifact(entry.jobId,{kind:'human',certified:false,
     expectedDigest:entry.digest,expectedListDigest:entry.listDigest,
-    expectedRevision:entry.revision,expectedMode:entry.mode});
+    expectedRevision:frame.revision,expectedMode:entry.mode});
   const blob=await response.blob();
+  const filename='document-verifie-par-une-personne-'+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+'.'+(entry.format||'bin');
+  if(options?.defer)return {blob,filename,expected};
   await assertDownloadStillCurrent(entry,expected);
-  const review=await api.review(entry.jobId);
-  if(review.humanVerifiedDeliverable!==true||String(review.revision)!==String(expected.revision))
-    throw new Error(copy.errors.approvalStale);
   const url=URL.createObjectURL(blob),link=el('a',null,null,document.body);
-  link.href=url;link.download='document-verifie-par-une-personne-'+
-    String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+'.'+(entry.format||'bin');
-  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  if(options?.quiet)return;
-  drawerMessage('Document validé.','is-success');
+  link.href=url;link.download=filename;link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  if(!options?.quiet)drawerMessage('Document validé.','is-success');
 }
 async function assertDownloadStillCurrent(entry,expected){
   const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
   if(!currentAccountEntry(entry)||state.accountEpoch!==expected.accountEpoch||
-    entry.status!==expected.status||entry.revision!==expected.revision||entry.mode!==expected.mode||
-    job.protectionPolicy?.digest!==expected.digest||review.protectionPolicy?.digest!==expected.digest||
-    job.listDigest!==expected.listDigest||review.listDigest!==expected.listDigest||
-    statusOf(job)!==expected.status||review.status!==expected.status||
-    job.processingMode!==expected.mode||review.processingMode!==expected.mode||
-    String(job.reviewRevision)!==String(expected.revision)||
-    String(review.revision)!==String(expected.revision)||!currentResultAvailable(job,review))
+     entry.mode!==expected.mode||job.protectionPolicy?.digest!==expected.digest||
+     review.protectionPolicy?.digest!==expected.digest||job.listDigest!==expected.listDigest||
+     review.listDigest!==expected.listDigest||job.processingMode!==expected.mode||review.processingMode!==expected.mode)
     throw new Error('Le document a changé pendant le téléchargement. Actualisez la révision.');
+  if(expected.humanVerified){
+    const selected=selectedValidationResult(job,review);
+    if(!selected||selected.revision!==String(expected.revision)||selected.status!==expected.status||
+       review.humanVerifiedDeliverable!==true)throw new Error(copy.errors.approvalStale);
+  }else if(entry.status!==expected.status||entry.revision!==expected.revision||
+     statusOf(job)!==expected.status||review.status!==expected.status||
+     String(job.reviewRevision)!==String(expected.revision)||String(review.revision)!==String(expected.revision)||
+     !currentResultAvailable(job,review))throw new Error('Le document a changé pendant le téléchargement. Actualisez la révision.');
 }
 function suppressGeneralTourLauncher(){
   try{

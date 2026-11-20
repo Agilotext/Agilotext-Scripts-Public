@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
   v2Capabilities, assertCreatedJob, assertPreviewHeaders, currentResultAvailable,
-  defaultRestoreUrl } from '../agiloshield-v2-client.js';
+  defaultRestoreUrl, selectedValidationResult } from '../agiloshield-v2-client.js';
 
 assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines'],
   anon2InclusionList:['Jean Dupont','Cœur-de-l’Est']}),
@@ -55,6 +55,17 @@ assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',assurance:'
   {...review,status:'REVIEW_REQUIRED',deliverable:false,previewAvailable:false}),false);
 assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',resultAvailable:true,
   workflowState:'DIRTY'}, {...review,status:'REVIEW_REQUIRED'}),false);
+
+const readyPair = {revision:'r2', status:'REVIEW_REQUIRED'};
+assert.deepEqual(selectedValidationResult(job, review), {revision:'r2', status:'READY'});
+assert.equal(selectedValidationResult({...job, validationResult:null}, {...review, validationResult:null}), null);
+assert.equal(selectedValidationResult(
+  {...job, validationResult:{revision:'r9', status:'REVIEW_REQUIRED'}},
+  {...review, validationResult:{revision:'r8', status:'REVIEW_REQUIRED'}}), null);
+assert.deepEqual(selectedValidationResult(
+  {...job, status:'REVIEW_REQUIRED', assurance:'non-verified', validationResult:readyPair},
+  {...review, status:'REVIEW_REQUIRED', deliverable:false, validationResult:readyPair}), readyPair);
+assert.equal(selectedValidationResult({...job, status:'FAILED', validationResult:readyPair}, review), null);
 const previewHeaders=new Headers({
   'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-List-Digest':'list-current',
   'X-Agiloshield-Revision':'r2','X-Agiloshield-Status':'READY',
@@ -139,8 +150,11 @@ assert.equal(batchBody.op, 'DECIDE_ALL_REVIEW');
 assert.equal(batchBody.action, 'MASK');
 assert.equal(batchBody.reason, 'review_batch');
 assert.equal(batchBody.revision, 'r2');
+assert.equal(batchBody.skipUnresolved, undefined);
 assert.equal(typeof batchBody.commandId, 'string');
 assert.ok(batchBody.commandId.length>8);
+await client.decideAll(7, 'd1', {revision:'r2', action:'MASK', skipUnresolved:true});
+assert.equal(JSON.parse(seen.at(-1).options.body).skipUnresolved, true);
 await client.decideAll(7, 'd1', {revision:'r2', action:'KEEP'});
 assert.notEqual(JSON.parse(seen.at(-1).options.body).commandId, batchBody.commandId);
 assert.throws(()=>client.decideAll(7,'d1',{revision:'r2',action:'DROP'}),/Invalid decision/);
