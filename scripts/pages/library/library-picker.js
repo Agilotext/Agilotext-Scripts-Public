@@ -1,6 +1,6 @@
 /**
  * Picker dashboard A : popover sections + recherche. Synchronise #default-template-select.
- * @version 2.2.0
+ * @version 2.2.5
  */
 (function (global) {
   "use strict";
@@ -28,14 +28,42 @@
     return !!(Api() && Api().hasCseAccess && Api().hasCseAccess());
   }
 
+  function hasJunior() {
+    return !!(Api() && Api().hasJuniorAccess && Api().hasJuniorAccess());
+  }
+
+  function juniorOnlyAccess(access) {
+    return !!(access && access.hasJunior && !access.hasCse);
+  }
+
+  function isJuniorOfficial(id) {
+    var n = Number(id);
+    return n === -12 || n === -13 || n === -14;
+  }
+
   function visibleModels(models, canCreate) {
     var list = (models || []).filter(function (m) {
-      return !Api().isHiddenOfficial || !Api().isHiddenOfficial(m.promptModelId);
+      if (!m) return false;
+      if (Api().isHiddenOfficial && Api().isHiddenOfficial(m.promptModelId)) return false;
+      if (m.packJunior && !hasJunior()) return false;
+      if (m.packCse && hasJunior() && !hasCse()) return false;
+      return true;
     });
     if (canCreate) return list.slice();
     return list.filter(function (m) {
       return m.canUse && Api().isGenerationSafeId(m.promptModelId);
     });
+  }
+
+  function copiesNeeded(models, access) {
+    if (!juniorOnlyAccess(access)) return [];
+    var ids = [];
+    (models || []).forEach(function (m) {
+      if (!m || !m.packJunior || !isJuniorOfficial(m.promptModelId)) return;
+      if (acquiredId(m)) return;
+      ids.push(Number(m.promptModelId));
+    });
+    return ids;
   }
 
   function groups(models, q) {
@@ -77,6 +105,7 @@
 
   function canSelect(m) {
     if (!m) return false;
+    if (m.packJunior && !hasJunior()) return false;
     if (m.packCse && !hasCse()) return false;
     var status = String(m.promptModelStatus || "READY").toUpperCase();
     if (status !== "READY" && status !== "ACTIVE") return false;
@@ -88,6 +117,7 @@
   function showAdd(m, canCreate) {
     if (!canCreate || !m) return false;
     if (m.packCse && !hasCse()) return false;
+    if (m.packJunior && !hasJunior()) return false;
     if (acquiredId(m)) return false;
     return !!(m.requiresUserCopy || Number(m.promptModelId) < -1);
   }
@@ -118,28 +148,85 @@
     return { value: val, textContent: text };
   }
 
-  function syncNative(select, models, selectedId) {
+  function syncNative(select, models, selectedId, access) {
     if (!select) return;
+    var juniorOnly = juniorOnlyAccess(access);
     if (select.classList && select.classList.add) {
       select.classList.add("agilo-lib-native-select");
     }
     if (select.required) select.required = false;
+    if (juniorOnly && select.remove && select.options) {
+      var i;
+      for (i = select.options.length - 1; i >= 0; i--) {
+        if (String(select.options[i].value) === "7") select.remove(i);
+      }
+    }
     var keep = {};
     Array.prototype.forEach.call(select.options || [], function (opt) {
       keep[String(opt.value)] = true;
     });
     (models || []).forEach(function (m) {
-      if (!Api().isGenerationSafeId(m.promptModelId)) return;
-      var val = String(m.promptModelId);
-      if (keep[val]) return;
+      if (!m) return;
+      var val = "";
+      var label = m.cardTitle || "";
+      if (m.packJunior && isJuniorOfficial(m.promptModelId)) {
+        if (!juniorOnly) return;
+        var copy = acquiredId(m);
+        if (!copy || !Api().isGenerationSafeId(copy)) return;
+        val = String(copy);
+      } else {
+        if (!Api().isGenerationSafeId(m.promptModelId)) return;
+        if (juniorOnly && String(m.promptModelId) === "7") return;
+        val = String(m.promptModelId);
+      }
+      if (!val || keep[val]) return;
       keep[val] = true;
-      var opt = makeOption(val, m.cardTitle || val);
+      var opt = makeOption(val, label || val);
       if (select.appendChild) select.appendChild(opt);
       else if (select.options && select.options.push) select.options.push(opt);
     });
+    if (juniorOnly && Number(selectedId) === 7) selectedId = null;
     if (selectedId != null && Api().isGenerationSafeId(selectedId)) {
       select.value = String(selectedId);
     }
+  }
+
+  function ensureJuniorCopies(creds, pack, access) {
+    var models = (pack && pack.models) || [];
+    var needed = copiesNeeded(models, access);
+    if (!needed.length || !Api() || !Api().duplicate) return Promise.resolve(pack);
+    var chain = Promise.resolve();
+    needed.forEach(function (id) {
+      chain = chain.then(function () {
+        var row = models.filter(function (m) { return Number(m.promptModelId) === id; })[0];
+        if (!row || acquiredId(row)) return null;
+        return Api().duplicate(creds, id, row.cardTitle || "").then(function (res) {
+          var raw = res && (res.promptModelId != null ? res.promptModelId : (res.data && res.data.promptModelId));
+          var n = Number(raw);
+          if (res && res.ok && isFinite(n) && n > 0) {
+            row.acquiredPromptModelId = n;
+            row.alreadyCopied = true;
+          }
+        });
+      });
+    });
+    return chain.then(function () {
+      if (!Api().fetchLists) return pack;
+      return Api().fetchLists(creds).then(function (fresh) {
+        var next = (fresh && fresh.models) || [];
+        var patched = {};
+        models.forEach(function (m) {
+          if (acquiredId(m)) patched[String(m.promptModelId)] = acquiredId(m);
+        });
+        next.forEach(function (m) {
+          if (!m) return;
+          var kept = patched[String(m.promptModelId)];
+          if (kept && !acquiredId(m)) m.acquiredPromptModelId = kept;
+        });
+        if (!next.length) return pack;
+        return Object.assign({}, fresh, { models: next });
+      }).catch(function () { return pack; });
+    }).catch(function () { return pack; });
   }
 
   function writeSelect(select, id) {
@@ -155,11 +242,102 @@
     select.dispatchEvent(ev);
   }
 
-  function findSummaryToggle() {
-    if (typeof document === "undefined") return null;
-    return document.getElementById("toggle-summary") ||
-      document.querySelector('[name="toggle-summary"]') ||
-      document.querySelector('[data-option-type="summary"]');
+  function findSummaryToggle(doc) {
+    var root = doc || (typeof document !== "undefined" ? document : null);
+    if (!root) return null;
+    return (root.getElementById && root.getElementById("toggle-summary")) ||
+      (root.querySelector && (root.querySelector('[name="toggle-summary"]') ||
+        root.querySelector('[data-option-type="summary"]'))) ||
+      null;
+  }
+
+  function currentNoun() {
+    var A = Api();
+    if (A && A.getMemberAccess) {
+      var acc = A.getMemberAccess();
+      if (acc && acc.noun) return acc.noun;
+    }
+    return hasCse() ? "PV" : "compte rendu";
+  }
+
+  function copyForNoun(noun) {
+    var pv = noun === "PV";
+    return {
+      toggle: pv ? "Générer le PV" : "Générer le compte rendu",
+      selectTitle: pv ? "Sélectionnez un modèle de PV :" : "Sélectionnez un modèle de compte rendu :",
+      hint: pv
+        ? "Le PV est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut."
+        : "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut."
+    };
+  }
+
+  function hintDisabledText() {
+    return copyForNoun(currentNoun()).hint;
+  }
+
+  function findToggleProductLabel(doc) {
+    var toggle = findSummaryToggle(doc);
+    if (!toggle || !toggle.closest) return null;
+    var wrap = toggle.closest(".checkbox-component");
+    if (!wrap || !wrap.querySelector) return null;
+    var grey = wrap.querySelector(".text-size-small.text-color-grey");
+    if (grey) return grey;
+    var nodes = wrap.querySelectorAll ? wrap.querySelectorAll(".text-size-small") : [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (/compte rendu|\bPV\b/i.test(nodes[i].textContent || "")) return nodes[i];
+    }
+    return null;
+  }
+
+  function findSelectProductTitle(doc) {
+    if (!doc || !doc.getElementById) return null;
+    var anchor = doc.getElementById("agilo-prompt-picker-anchor");
+    var container = (anchor && anchor.closest) ? anchor.closest(".select-container") : null;
+    if (!container && doc.querySelector) container = doc.querySelector(".select-container");
+    if (!container || !container.querySelector) return null;
+    var title = container.querySelector(".wrapper-info .text-size-small.text-weight-bold");
+    if (title) return title;
+    var nodes = container.querySelectorAll ? container.querySelectorAll(".text-size-small") : [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (/modèle de (compte rendu|PV)/i.test(nodes[i].textContent || "")) return nodes[i];
+    }
+    return null;
+  }
+
+  function applyElNoun(el, nextText, nounKey) {
+    if (!el || !el.getAttribute || !el.setAttribute) return;
+    if (!el.getAttribute("data-agilo-noun-src")) {
+      el.setAttribute("data-agilo-noun-src", el.textContent || "");
+    }
+    if (nounKey === "pv") {
+      el.textContent = nextText;
+    } else {
+      el.textContent = el.getAttribute("data-agilo-noun-src") || el.textContent;
+    }
+    el.setAttribute("data-agilo-noun", nounKey);
+  }
+
+  function applyDashboardNoun(doc) {
+    var root = doc || (typeof document !== "undefined" ? document : null);
+    if (!root) return;
+    var noun = currentNoun();
+    var nounKey = noun === "PV" ? "pv" : "cr";
+    var copy = copyForNoun(noun);
+    var toggleLabel = findToggleProductLabel(root);
+    var selectTitle = findSelectProductTitle(root);
+    if (nounKey !== "pv") {
+      if (toggleLabel && toggleLabel.getAttribute("data-agilo-noun")) {
+        applyElNoun(toggleLabel, copy.toggle, "cr");
+      }
+      if (selectTitle && selectTitle.getAttribute("data-agilo-noun")) {
+        applyElNoun(selectTitle, copy.selectTitle, "cr");
+      }
+      return;
+    }
+    applyElNoun(toggleLabel, copy.toggle, "pv");
+    applyElNoun(selectTitle, copy.selectTitle, "pv");
   }
 
   function summaryOn() {
@@ -171,7 +349,7 @@
   function hintHtml(summaryEnabled) {
     if (summaryEnabled) return "";
     return '<div class="agilo-lib-picker__hint" role="status" aria-live="polite">' +
-      "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut." +
+      hintDisabledText() +
       "</div>";
   }
 
@@ -204,9 +382,12 @@
     }
     if (acquiredId(m)) bits.push('<span class="agilo-lib-badge agilo-lib-badge--acquired">Dans Mes modèles</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
+    if (m.packJunior) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">Junior</span>');
     if (m.packCse && !hasCse()) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
-    } else if (!m.packCse && showAdd(m, canCreate)) {
+    } else if (m.packJunior && !hasJunior()) {
+      bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
+    } else if (!m.packCse && !m.packJunior && showAdd(m, canCreate)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
     }
     return bits.join("");
@@ -223,11 +404,14 @@
   }
 
   function mount(anchor, creds, pack, access) {
+    if (access && Api().setMemberAccess) Api().setMemberAccess(access);
     if (access && Api().applyCseUnlock) {
       pack = Object.assign({}, pack, { models: Api().applyCseUnlock(pack.models || [], access) });
-    } else if (access && Api().setMemberAccess) {
-      Api().setMemberAccess(access);
     }
+    if (access && Api().applyJuniorUnlock) {
+      pack = Object.assign({}, pack, { models: Api().applyJuniorUnlock(pack.models || [], access) });
+    }
+    if (typeof document !== "undefined") applyDashboardNoun(document);
     var canCreate = Api().canCreate(creds);
     var models = visibleModels(pack.models || [], canCreate);
     var select = typeof document !== "undefined" ? document.getElementById("default-template-select") : null;
@@ -241,7 +425,7 @@
     if (typeof document !== "undefined" && document.body) {
       document.body.classList.add("agilo-lib-picker-on");
     }
-    syncNative(select, models, selectedId);
+    syncNative(select, models, selectedId, access);
     writeSelect(select, selectedId);
 
     var wrap = document.createElement("div");
@@ -299,7 +483,8 @@
       var C = Core();
       var active = Number(m.promptModelId) === Number(selectedId);
       var choosable = canSelect(m);
-      var locked = !!(m.packCse && !hasCse()) || (!m.packCse && showAdd(m, canCreate));
+      var locked = !!(m.packCse && !hasCse()) || !!(m.packJunior && !hasJunior()) ||
+        (!m.packCse && !m.packJunior && showAdd(m, canCreate));
       var cls = "agilo-lib-picker__opt" +
         (active ? " is-active" : "") +
         (choosable ? "" : " is-off") +
@@ -336,7 +521,7 @@
         hint.textContent = "";
       } else {
         hint.hidden = false;
-        hint.textContent = "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.";
+        hint.textContent = hintDisabledText();
       }
     }
 
@@ -391,7 +576,7 @@
       models.forEach(function (m) {
         m.isDefault = Number(m.promptModelId) === selectedId;
       });
-      syncNative(select, models, selectedId);
+      syncNative(select, models, selectedId, access);
       writeSelect(select, selectedId);
       renderButton();
       close();
@@ -446,7 +631,7 @@
         Api().fetchLists(creds).then(function (fresh) {
           models = visibleModels(fresh.models || [], canCreate);
           selectedId = safeId(models, selectedId);
-          syncNative(select, models, selectedId);
+          syncNative(select, models, selectedId, access);
           renderButton();
           if (wrap.classList.contains("is-open")) paintList();
         }).catch(function () { /* carte locale déjà là */ });
@@ -557,13 +742,15 @@
       return Promise.all([
         Api().fetchLists(creds),
         Api().fetchMemberAccess(creds).catch(function () {
-          return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+          return { hasCse: false, hasJunior: false, noun: "compte rendu", sources: [], businessTypes: [] };
         })
       ]).then(function (pair) {
-        pickerFailed = false;
-        pickerMounted = true;
-        pickerLoading = false;
-        mount(anchor, creds, pair[0], pair[1]);
+        return ensureJuniorCopies(creds, pair[0], pair[1]).then(function (pack) {
+          pickerFailed = false;
+          pickerMounted = true;
+          pickerLoading = false;
+          mount(anchor, creds, pack, pair[1]);
+        });
       });
     }).catch(function (err) {
       pickerLoading = false;
@@ -592,13 +779,15 @@
   }
 
   global.AgiloLibraryPicker = {
-    VERSION: "2.2.0",
+    VERSION: "2.2.5",
     mount: mount,
     boot: boot,
     _groups: groups,
     _canSelect: canSelect,
     _filter: matchQ,
     _syncNative: syncNative,
+    _copiesNeeded: copiesNeeded,
+    _ensureJuniorCopies: ensureJuniorCopies,
     _writeSelect: writeSelect,
     _visibleModels: visibleModels,
     _showAdd: showAdd,
@@ -607,6 +796,8 @@
     _sortMine: sortMine,
     _titleText: titleText,
     _hintHtml: hintHtml,
-    _packCta: packCta
+    _packCta: packCta,
+    _copyForNoun: copyForNoun,
+    _applyDashboardNoun: applyDashboardNoun
   };
 })(typeof window !== "undefined" ? window : globalThis);

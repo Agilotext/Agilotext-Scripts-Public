@@ -106,8 +106,8 @@ describe("library CSE unlock", () => {
     assert.equal(Picker._canSelect(copied), true);
   });
 
-  it("picker v2.2.0 et api 1.5.6", () => {
-    assert.equal(Picker.VERSION, "2.2.0");
-    assert.equal(Api.VERSION, "1.5.6");
+  it("picker v2.2.5 et api 1.5.8", () => {
+    assert.equal(Picker.VERSION, "2.2.5");
+    assert.equal(Api.VERSION, "1.5.8");
   });
 });
