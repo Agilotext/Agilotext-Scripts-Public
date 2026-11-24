@@ -17,8 +17,20 @@ describe("isInvestigationPvPromptId", () => {
     assert.equal(api.isInvestigationPvPromptId(720), true);
   });
 
-  it("refuse 700 / 703 / 704 / 787 / CSE", () => {
-    [700, 703, 704, 787, 680, -1, "", null].forEach((id) => {
+  it("autorise 1107 et 1108", () => {
+    assert.equal(api.isInvestigationPvPromptId(1107), true);
+    assert.equal(api.isInvestigationPvPromptId(1108), true);
+  });
+
+  it("lit un abonnement CSE et reste fermé sinon", () => {
+    assert.equal(api.readCseAccess({ businessTypes: ["cse"] }).noun, "PV");
+    assert.equal(api.readCseAccess({ sources: ["plan:pln_cse-ic00nme"] }).hasCse, true);
+    assert.equal(api.readCseAccess({ businessTypes: ["generic"] }).noun, "compte rendu");
+    assert.equal(api.readCseAccess(null).hasCse, false);
+  });
+
+  it("refuse 1106, 1109, 700, 703, 704, 787", () => {
+    [1106, 1109, 700, 703, 704, 787, 680, -1, "", null].forEach((id) => {
       assert.equal(api.isInvestigationPvPromptId(id), false, String(id));
     });
   });

@@ -15,7 +15,7 @@ Prod pinne souvent **chaque** script. Remplacer le `src` **exact** de `Code-ed-h
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5682eb68/scripts/pages/editor/Code-ed-header.js?v=5682eb68"></script>
 ```
 
-Allowlist : promptid **705–720** seulement. Pas 787 / 704 / pack CSE.
+Allowlist : promptid **705–720**, **1107**, **1108**. Pas 787 / 704 / pack CSE.
 
 Libellé client : `PV d’enquête (Word)`. Pendant l’appel : `Préparation du Word`. Anti double-clic.
 

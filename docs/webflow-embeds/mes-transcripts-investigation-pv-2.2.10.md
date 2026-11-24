@@ -4,7 +4,7 @@
 **Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.10-investigation-pv'`  
 **Helper :** `scripts/pages/shared/format-investigation-pv.js` (chargé depuis le même `@SHA`)
 
-Lien **PV d’enquête (Word)** si `promptid` 705–720 **et** statut `READY_SUMMARY_*` (y compris `READY_SUMMARY_ON_ERROR`).  
+Lien **PV d’enquête (Word)** si `promptid` 705–720, 1107 ou 1108 **et** statut `READY_SUMMARY_*` (y compris `READY_SUMMARY_ON_ERROR`).  
 POST sidecar `formatInvestigationPv`. Le CR officiel (Relancer / Télécharger le compte rendu) reste Mistral.
 
 v2.2.10 : même clone que l’éditeur (retirer `summary_*`, garder icône, CSS flex). Les sélecteurs `[class*="download_wrapper-link_summary_"]` **excluent** le lien investigation (sinon ON_ERROR cache le wrap). Menu ouvert : `z-index: 100`.

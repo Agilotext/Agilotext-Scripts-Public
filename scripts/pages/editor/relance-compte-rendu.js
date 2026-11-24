@@ -87,6 +87,65 @@
   function pickToken(edition, email) {
     return agiloEditorCredsRoot().pickToken(edition, email);
   }
+
+  let cseAccount = false;
+
+  function applyVisibleCseLabels(root) {
+    if (!cseAccount || !root) return;
+    const exact = {
+      'Compte rendu': 'PV',
+      'Télécharger compte rendu': 'Télécharger le PV',
+      'Modèles de compte-rendu': 'Modèles de PV',
+      'Éditeur de transcription & compte rendu': 'Éditeur de transcription et PV'
+    };
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const raw = node.nodeValue || '';
+      const key = raw.replace(/\s+/g, ' ').trim();
+      if (exact[key]) node.nodeValue = raw.replace(key, exact[key]);
+    });
+    root.querySelectorAll('[title], [aria-label]').forEach((el) => {
+      ['title', 'aria-label'].forEach((attr) => {
+        const value = el.getAttribute(attr);
+        if (value && exact[value.trim()]) el.setAttribute(attr, exact[value.trim()]);
+      });
+    });
+  }
+
+  async function ensureCseNoun() {
+    try {
+      const email = pickEmail();
+      const edition = pickEdition();
+      const token = email ? await ensureToken(email, edition) : '';
+      if (!email || !token) return;
+      const body = new URLSearchParams({ username: email, token: token, edition: edition || 'ent' });
+      const res = await fetch('https://api.agilotext.com/api/v1/library2/member-access', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) return;
+      const api = await loadFormatInvestigationPvHelper();
+      const read = api && typeof api.readCseAccess === 'function' ? api.readCseAccess(data) : null;
+      cseAccount = !!(read && read.hasCse);
+    } catch (_) {
+      cseAccount = false;
+    }
+    if (cseAccount) {
+      applyVisibleCseLabels(document.body);
+      applyRelanceButtonLabel();
+      const inline = document.querySelector('#agilo-inline-generate-cr-wrap button');
+      if (inline) {
+        inline.textContent = 'Générer un PV';
+        inline.setAttribute('aria-label', 'Générer un PV');
+      }
+    }
+  }
   function querySummaryEditor() {
     return agiloEditorCredsRoot().querySummaryEditor();
   }
@@ -895,9 +954,9 @@
   function getButtonText() {
     if (isPvPrompt(_getCachedPromptId(pickJobId()))) return 'Générer un PV';
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    if (activeTab?.id === 'tab-summary' && hasErrorMessageInDOM()) return 'Générer un compte-rendu';
+    if (activeTab?.id === 'tab-summary' && hasErrorMessageInDOM()) return cseAccount ? 'Générer un PV' : 'Générer un compte-rendu';
     if (activeTab?.id === 'tab-summary') return 'Régénérer';
-    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
+    if (activeTab?.id === 'tab-transcript' && transcriptModified) return cseAccount ? 'Régénérer le PV' : 'Régénérer compte-rendu';
     return 'Relancer';
   }
 
@@ -924,8 +983,9 @@
       b.type = 'button';
       b.className = 'agilo-inline-gen-cr-btn';
       b.setAttribute('data-action', 'relancer-compte-rendu');
-      b.setAttribute('aria-label', 'Générer un compte-rendu');
-      b.textContent = 'Générer un compte-rendu';
+      const generateLabel = cseAccount ? 'Générer un PV' : 'Générer un compte-rendu';
+      b.setAttribute('aria-label', generateLabel);
+      b.textContent = generateLabel;
       wrap.appendChild(b);
       anchor.insertAdjacentElement('afterend', wrap);
     }
@@ -1089,7 +1149,9 @@
       loadingText.textContent = POLL_STATUS_USER_TEXT;
       const loadingSubtitle = document.createElement('p');
       loadingSubtitle.className = 'loading-subtitle';
-      loadingSubtitle.textContent = 'Mise à jour automatique dès que le compte-rendu est prêt.';
+      loadingSubtitle.textContent = cseAccount
+        ? 'Mise à jour automatique dès que le PV est prêt.'
+        : 'Mise à jour automatique dès que le compte-rendu est prêt.';
       
       summaryEditor.innerHTML = '';
       summaryEditor.appendChild(loaderContainer);
@@ -1283,7 +1345,7 @@
       return api.isInvestigationPvPromptId(id);
     }
     const n = Number(id);
-    return n >= 705 && n <= 720;
+    return (n >= 705 && n <= 720) || n === 1107 || n === 1108;
   }
 
   function loadFormatInvestigationPvHelper() {
@@ -1316,7 +1378,7 @@
   async function generateInvestigationPv(creds, promptId) {
     const confirmed = confirm(
       'Préparer le PV d’enquête (Word) ?\n\n' +
-      'Le compte rendu affiché ne change pas. Cela ne compte pas comme une régénération.'
+      'Le texte affiché ne change pas. Cela ne compte pas comme une régénération.'
     );
     if (!confirmed) {
       isGenerating = false;
@@ -1659,6 +1721,7 @@
     window.__agiloRelanceProductionInitialized = true;
     log('Initialisation...');
     lastJobId = pickJobId();
+    ensureCseNoun();
     
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
@@ -1682,7 +1745,9 @@
           }
         } catch (e) {}
         if (typeof window.toast === 'function') {
-          window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
+          window.toast(cseAccount
+            ? '✅ Transcript sauvegardé - Vous pouvez régénérer le PV'
+            : '✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
         }
         updateButtonVisibility();
         setTimeout(async () => {
