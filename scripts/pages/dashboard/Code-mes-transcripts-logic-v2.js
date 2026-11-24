@@ -891,6 +891,59 @@
     return 'ent'; // Business par défaut si non trouvé
   }
 
+  let cseAccount = false;
+
+  function pieceNoun() {
+    return cseAccount ? 'PV' : 'compte rendu';
+  }
+
+  function applyVisibleCseLabels(root) {
+    if (!cseAccount || !root) return;
+    const exact = {
+      'Compte rendu': 'PV',
+      'Télécharger Compte-rendu': 'Télécharger le PV',
+      'Télécharger compte rendu': 'Télécharger le PV'
+    };
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const raw = node.nodeValue || '';
+      const key = raw.replace(/\s+/g, ' ').trim();
+      if (exact[key]) node.nodeValue = raw.replace(key, exact[key]);
+    });
+    root.querySelectorAll('[title]').forEach((el) => {
+      const value = el.getAttribute('title');
+      if (value && exact[value.trim()]) el.setAttribute('title', exact[value.trim()]);
+    });
+  }
+
+  async function ensureCseNoun(email, token, edition) {
+    try {
+      if (!email || !token) return;
+      const body = new URLSearchParams({
+        username: email,
+        token: token,
+        edition: edition || 'ent'
+      });
+      const res = await fetch('https://api.agilotext.com/api/v1/library2/member-access', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) return;
+      const api = window.AgiloFormatInvestigationPv;
+      const read = api && typeof api.readCseAccess === 'function' ? api.readCseAccess(data) : null;
+      cseAccount = !!(read && read.hasCse);
+    } catch (_) {
+      cseAccount = false;
+    }
+    if (cseAccount) applyVisibleCseLabels(document.body);
+  }
+
   function displayJobTitle(job) {
     return (job.jobTitle || job.filename || 'Transcript').split('.')[0];
   }
@@ -1159,7 +1212,9 @@
       return archivedJobMessage(job);
     }
     if (job && isNoSummaryCase(job)) {
-      return "Compte rendu non demandé pour cette transcription.";
+      return cseAccount
+        ? "PV non demandé pour cette transcription."
+        : "Compte rendu non demandé pour cette transcription.";
     }
 
     switch (up) {
@@ -1172,20 +1227,26 @@
         line = 'Transcription en cours de traitement';
         break;
       case 'READY_SUMMARY_PENDING':
-        line = 'Transcription prête ; compte rendu en cours de génération';
+        line = `Transcription prête ; ${pieceNoun()} en cours de génération`;
         break;
       case 'READY_SUMMARY_READY':
-        line = 'Transcription et compte rendu prêts';
+        line = `Transcription et ${pieceNoun()} prêts`;
         break;
       case 'READY_SUMMARY_ON_ERROR':
         if (job && isDurationTooLongError(job)) {
-          line = "Le compte rendu n'a pas pu être généré : audio trop long pour votre offre.";
+          line = cseAccount
+            ? "Le PV n'a pas pu être généré : audio trop long pour votre offre."
+            : "Le compte rendu n'a pas pu être généré : audio trop long pour votre offre.";
         } else {
-          line = "Le compte rendu n'a pas pu être généré";
+          line = cseAccount
+            ? "Le PV n'a pas pu être généré"
+            : "Le compte rendu n'a pas pu être généré";
         }
         break;
       case 'ERROR_SUMMARY_ON_ERROR':
-        line = "Le compte rendu n'a pas pu être généré";
+        line = cseAccount
+          ? "Le PV n'a pas pu être généré"
+          : "Le compte rendu n'a pas pu être généré";
         break;
       case 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS':
         line = archivedJobMessage(job || {});
@@ -1986,6 +2047,7 @@
       renderLoadingState(el, 'Chargement de vos transcripts...');
       return;
     }
+    await ensureCseNoun(userEmail, token, edition);
 
     lastKnownToken = token;
     lastSummaryCreds = { userEmail, token, edition };
@@ -2115,6 +2177,7 @@
         })
       );
       initializeBulkActions();
+      if (cseAccount) applyVisibleCseLabels(document.body);
     }
 
     async function loadPageFromCache(pageIndex, opts = {}) {

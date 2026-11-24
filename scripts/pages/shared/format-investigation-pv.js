@@ -1,6 +1,6 @@
 /**
  * Sidecar Nico : POST /api/v1/formatInvestigationPv → DOCX habillé.
- * Allowlist promptid 705–712 (Bauer) et 713–720 (Magali). Pas 700/703/704/787/CSE.
+ * Allowlist promptid 705–720, 1107, 1108. Pas 700/703/704/787/CSE.
  * N’écrit pas le compte rendu officiel.
  */
 (function (root) {
@@ -21,7 +21,7 @@
 
   function isInvestigationPvPromptId(id) {
     var n = toInt(id);
-    return n >= 705 && n <= 720;
+    return (n >= 705 && n <= 720) || n === 1107 || n === 1108;
   }
 
   function isReadyStatus(status) {
@@ -209,6 +209,31 @@
     return !!inFlight[String(jobId || "")];
   }
 
+  function asList(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") return value.split(",");
+    return [];
+  }
+
+  function readCseAccess(payload) {
+    var data = payload && payload.data && typeof payload.data === "object" ? payload.data : (payload || {});
+    var sources = asList(data.sources || data.approvedTypes).map(function (s) {
+      return String(s).toLowerCase();
+    }).filter(Boolean);
+    var businessTypes = asList(data.businessTypes || data.business_types).map(function (s) {
+      return String(s).toLowerCase().trim();
+    }).filter(Boolean);
+    var hasCse = sources.some(function (s) {
+      return s.indexOf("cse") !== -1 || s.indexOf("pln_cse-") !== -1;
+    }) || businessTypes.indexOf("cse") !== -1;
+    if (data.approvedSubscriptionTypes) {
+      hasCse = hasCse || asList(data.approvedSubscriptionTypes).some(function (x) {
+        return String(x).toLowerCase().trim() === "cse";
+      });
+    }
+    return { hasCse: hasCse, noun: hasCse ? "PV" : "compte rendu" };
+  }
+
   var api = {
     API_URL: API_URL,
     TIMEOUT_MS: TIMEOUT_MS,
@@ -225,7 +250,8 @@
     parseContentDispositionFilename: parseContentDispositionFilename,
     parseApiError: parseApiError,
     downloadInvestigationPv: downloadInvestigationPv,
-    isBusy: isBusy
+    isBusy: isBusy,
+    readCseAccess: readCseAccess
   };
 
   root.AgiloFormatInvestigationPv = api;
