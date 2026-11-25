@@ -1,10 +1,15 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
+ * v1.12 — essai intervenants : consentement armed, fail-closed, exclusivité format
+ * v1.10 — upsell popup ; CR + format Free libres (défaut ON) ; speakers lockés ; hook Maestro
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Free.
  * Ne pas modifier free.js (version precedente, encore live).
+ * Branche Scripts-Public 1.10 — ne pas pousser sur @24cac26 / 1.09 sans QA.
+ *
+ * Prérequis Webflow : supprimer le div `blocker` hover (voir WEBFLOW_FREE_DELETE_BLOCKER.md).
  */
 
 // erreurs API job — préférer scripts/shared/agilo-api-error-format.js chargé avant ce script
@@ -98,10 +103,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const input = wrap.querySelector('.agilo-multi-upload-input, input[type="checkbox"]');
     const isMultiPage = /\/multi-file-upload\/?$/.test(window.location.pathname || '');
 
-    function singleUploadUrl() {
-      return String(multiUploadUrl || '').replace(/\/multi-file-upload\/?$/, '');
-    }
-
     function setToggleState(checked) {
       if (input) input.checked = !!checked;
       if (toggle) toggle.classList.toggle('w--redirected-checked', !!checked);
@@ -109,6 +110,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showFreeUpgradeMessage() {
+      if (window.AgiloFreeUpgrade && typeof window.AgiloFreeUpgrade.show === 'function') {
+        window.AgiloFreeUpgrade.show({ minPlan: 'pro', reason: 'Envoi multiple', source: 'multi_upload' });
+        return;
+      }
       if (window.AgiloGate && typeof window.AgiloGate.showUpgrade === 'function') {
         window.AgiloGate.showUpgrade('pro', 'Envoi multiple');
         return;
@@ -122,13 +127,12 @@ document.addEventListener('DOMContentLoaded', () => {
         event.stopPropagation();
       }
       if (isMultiPage) {
-        const back = singleUploadUrl();
-        if (back) window.location.href = back;
+        setToggleState(true);
         return;
       }
       if (edition === 'free') {
         wrap.classList.add('is-disabled');
-        setToggleState(true);
+        setToggleState(false);
         showFreeUpgradeMessage();
         return;
       }
@@ -143,10 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wrap.setAttribute('role', 'button');
     wrap.setAttribute('tabindex', '0');
-    wrap.setAttribute('aria-label', 'Envoi unique sélectionné.');
-    if (link) link.setAttribute('href', '#');
+    wrap.setAttribute('aria-label', 'Activer l’envoi multiple');
+    if (link) link.setAttribute('href', multiUploadUrl || '#');
 
-    setToggleState(true);
+    setToggleState(isMultiPage);
     wrap.classList.add('is-disabled');
 
     wrap.addEventListener('click', handleActivate);
@@ -291,9 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide, silencieux ou illisible.<br>Vérifiez l’enregistrement sur votre appareil, puis renvoyez un autre fichier.<br>Si le problème persiste, écrivez-nous à contact@agilotext.com.';
     }
     if (!text) return defaultErrorHtml;
-    if (/java\.lang|illegalargumentexception|invalid to-word/i.test(text)) {
-      return '<strong>Envoi impossible pour le moment</strong><br>Le fichier n’a pas pu partir.<br>Réessayez dans quelques minutes.<br>Si le message revient, écrivez-nous à contact@agilotext.com.';
-    }
     return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
   };
 
@@ -331,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     const err = (data && data.errorMessage) || '';
-    if (window.agiloClassifyUploadError && window.agiloClassifyUploadError(data || err)) {
+    if (window.agiloClassifyUploadError) {
       const c = window.agiloClassifyUploadError(data || err);
       if (c && c.kind === 'audio_empty') {
         showBusinessProcessingError(c.userPlain);
@@ -357,24 +358,51 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'file';
   }
 
-  function captureTranscriptCreated(source) {
-    try {
-      if (!window.posthog || typeof window.posthog.capture !== 'function') return;
-      var host = String((window.location && window.location.hostname) || '');
-      var environment = (host === 'www.agilotext.com' || host === 'agilotext.com') ? 'production' : 'recette';
-      var raw = String(typeof edition !== 'undefined' ? edition : '').toLowerCase();
-      var offer = 'free';
-      if (raw === 'ent' || raw === 'business') offer = 'business';
-      else if (raw === 'pro' || raw === 'premium') offer = 'pro';
-      else if (raw === 'cse') offer = 'cse';
-      var origine = source === 'youtube' ? 'youtube' : (source === 'dictation' ? 'dictee' : 'fichier');
-      window.posthog.capture('transcript_created', {
-        origine: origine,
-        edition: offer,
-        environment: environment
-      });
-    } catch (err) { /* l'envoi continue */ }
+  function isSessionIso(value) {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(String(value || ''));
   }
+
+  function recorderFacts(formEl) {
+    var originEl = formEl && formEl.querySelector('input[name="agilo_audio_origin"]');
+    var atEl = formEl && formEl.querySelector('input[name="agilo_recorded_at"]');
+    var recordedAt = atEl && String(atEl.value || '').trim();
+    return {
+      origin: originEl && originEl.value === 'enregistreur_web' ? 'enregistreur_web' : '',
+      recordedAt: recordedAt && isSessionIso(recordedAt) ? recordedAt : ''
+    };
+  }
+
+  function clearRecorderFacts(formEl) {
+    ['agilo_audio_origin', 'agilo_recorded_at'].forEach(function (name) {
+      var el = formEl && formEl.querySelector('input[name="' + name + '"]');
+      if (el) el.value = '';
+    });
+  }
+
+  function audioFileCount(target) {
+    if (!target || typeof target.getAll !== 'function') return 0;
+    var n = 0;
+    for (var i = 1; i <= 12; i++) n += target.getAll('fileUpload' + i).length;
+    return n;
+  }
+
+  function appendAudioFacts(target, formEl) {
+    if (!target || typeof target.append !== 'function') return;
+    try {
+      target.delete('agilo_audio_origin');
+      target.delete('agilo_recorded_at');
+      target.delete('audioOrigin');
+      target.delete('recordedAt');
+    } catch (e) { /* ignore */ }
+    var facts = recorderFacts(formEl);
+    if (facts.origin === 'enregistreur_web' && facts.recordedAt && audioFileCount(target) === 1) {
+      target.append('audioOrigin', 'enregistreur_web');
+      target.append('recordedAt', facts.recordedAt);
+      return;
+    }
+    target.append('audioOrigin', 'import');
+  }
+
 
   // Valider l'URL YouTube
   function validateYouTubeUrl(url) {
@@ -775,8 +803,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return Math.max(60 * 60 * 1000, Math.min(bySpeed, 2 * 60 * 60 * 1000));
     })();
     const fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
+    const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
 
-    if (isYouTube) {
+    function usernameOf(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) return target.get('username') || '';
+      if (isYouTube) return (target && target.username) || '';
+      return typeof target.get === 'function' ? (target.get('username') || '') : '';
+    }
+    function applyFreshToken(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) target.set('token', globalToken);
+      else if (target) target.token = globalToken;
+    }
+
+    if (isYouTube && !multipart) {
       const body = new URLSearchParams();
       Object.keys(data).forEach(key => { body.append(key, String(data[key] || '')); });
       fetchOptions.body = body.toString();
@@ -807,14 +846,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const em = (responseData && responseData.errorMessage) || '';
 
         if (em.includes('error_invalid_token') && attempt < max) {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -847,6 +881,9 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_INVALID_YOUTUBE_URL') ||
+          em.includes('error_maestro_context_ambiguous') ||
+          em.includes('error_maestro_context_not_found') ||
+          em.includes('error_maestro_context_file_unsupported') ||
           em.toLowerCase().includes('could not get duration') ||
           em.toLowerCase().includes('error getting audio duration')
         ) {
@@ -865,14 +902,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return responseData;
       } catch (err) {
         if (attempt < max && err && err.type === 'invalidToken') {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -964,14 +996,30 @@ document.addEventListener('DOMContentLoaded', () => {
       if (formLoadingDiv) formLoadingDiv.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
 
-      const speakersChecked = speakersCheckbox.checked;
-      const summaryChecked = summaryCheckbox.checked;
-      const formatChecked = formatCheckbox.checked;
-      const speakersExpected = speakersSelect.value;
+      const sessionInputAtStart = form && form.querySelector('input[name="agilo_record_session_id"]');
+      const speakerSourceHint = sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload';
+      const trialApi = window.AgiloFreeSpeakerTrial;
+      const speakerIntent = (trialApi && typeof trialApi.readIntent === 'function')
+        ? trialApi.readIntent(speakerSourceHint)
+        : {
+            speakers: false,
+            armed: false,
+            formatChecked: !!(formatCheckbox && formatCheckbox.checked),
+            speakersExpected: (speakersSelect && speakersSelect.value) || '',
+            source: speakerSourceHint
+          };
+      const speakersChecked = !!(speakerIntent.speakers && speakerIntent.armed);
+      const speakersExpected = speakerIntent.speakersExpected;
+      const speakerSource = speakerIntent.source;
+      const summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
+      const formatChecked = speakerIntent.formatChecked != null
+        ? !!speakerIntent.formatChecked
+        : !!(formatCheckbox && formatCheckbox.checked);
 
       setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
       let payload;
+      let speakerReservation = null;
 
       // ✅ Anti "trop vite" : attendre que FilePond retourne un File natif
       const file = await waitPondFileReady(3000);
@@ -985,22 +1033,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Remplir proprement le FormData pour l'API
-      fd.append('token', globalToken);
-      fd.append('username', email);
-      fd.append('edition', edition);
-      fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
-      if (speakersChecked) {
-        fd.append('speakersExpected', speakersExpected || '');
-        fd.append('formatTranscript', 'false');
-      } else {
-        fd.append('formatTranscript', formatChecked ? 'true' : 'false');
-      }
-      fd.append('doSummary', summaryChecked ? 'true' : 'false');
-      if (translateCheckbox && translateCheckbox.checked) {
-        fd.append('translateTo', translateSelect.value);
-      }
-
       if (file.size === 0) {
         showBusinessProcessingError(window.agiloAudioEmptyUserPlain || 'Le fichier envoyé semble vide, silencieux ou illisible.');
         console.error('[AGILO:UPLOAD] audio_empty client precheck', { name: file.name, size: 0 });
@@ -1011,38 +1043,125 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (speakersChecked) {
+        if (!trialApi || typeof trialApi.reserve !== 'function') {
+          speakerReservation = { ok: false, reason: 'guard_missing' };
+        } else {
+          speakerReservation = await trialApi.reserve({ source: speakerSource });
+        }
+        if (!speakerReservation || !speakerReservation.ok) {
+          if ((!trialApi || typeof trialApi.reserve !== 'function') && trialApi && typeof trialApi.showStateModal === 'function') {
+            trialApi.showStateModal(speakerReservation && speakerReservation.reason);
+          }
+          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+          if (submitBtn) submitBtn.disabled = false;
+          form.dataset.sending = '0';
+          window.removeEventListener('beforeunload', beforeUnloadGuard);
+          return;
+        }
+      }
+
+      // Remplir proprement le FormData pour l'API
+      fd.append('token', globalToken);
+      fd.append('username', email);
+      fd.append('edition', edition);
+      const payloadCore = window.AgiloFreeSpeakerTrialCore;
+      const speakersPayload = (payloadCore && typeof payloadCore.resolveFreeSpeakersPayload === 'function')
+        ? payloadCore.resolveFreeSpeakersPayload(!!trialApi, {
+            speakers: speakersChecked,
+            armed: !!(speakerIntent && speakerIntent.armed),
+            formatChecked: formatChecked
+          }, speakerReservation || { ok: false })
+        : (speakersChecked && speakerReservation && speakerReservation.ok
+            ? { timestampTranscript: true, formatTranscript: false }
+            : { timestampTranscript: false, formatTranscript: !!formatChecked });
+      const speakersAllowed = !!speakersPayload.timestampTranscript;
+      fd.append('timestampTranscript', speakersAllowed ? 'true' : 'false');
+      fd.append('formatTranscript', speakersPayload.formatTranscript ? 'true' : 'false');
+      if (speakersAllowed) {
+        fd.append('speakersExpected', speakersExpected || '');
+      }
+      fd.append('doSummary', summaryChecked ? 'true' : 'false');
+      if (translateCheckbox && translateCheckbox.checked) {
+        fd.append('translateTo', translateSelect.value);
+      }
+
       // 🧹 Nettoyage des anciens noms + mapping vers ce que l'API attend
       fd.delete('fileToUpload');
       fd.delete('audioFile');
       fd.append('fileUpload1', file, file.name);
+      appendAudioFacts(fd, form);
 
       fd.append('deviceId', window.DEVICE_ID || '');
       fd.append('mailTranscription', 'true');
       payload = fd;
 
-      sendWithRetry(payload, 3, false)
+      // v1.10 — Maestro B+ : enrichissement optionnel (contextId)
+      function maybeEnrichAndSend(formData) {
+        var send = function (finalFd) { return sendWithRetry(finalFd, 3, false); };
+        if (!window.AgiloMaestroContext || typeof window.AgiloMaestroContext.enrichFormData !== 'function') {
+          return send(formData);
+        }
+        if (typeof window.AgiloMaestroContext.hasActiveContext === 'function' &&
+            window.AgiloMaestroContext.hasActiveContext()) {
+          try { formData.delete('doSummary'); } catch (e) { /* ignore */ }
+          formData.append('doSummary', 'true');
+        }
+        return Promise.resolve(window.AgiloMaestroContext.enrichFormData(formData)).then(function (fd2) {
+          return send(fd2 || formData);
+        });
+      }
+
+      maybeEnrichAndSend(fd)
         .then(data => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
 
           if (data && data.status === 'OK') {
             showSuccess();
-            captureTranscriptCreated(uploadSource);
+            clearRecorderFacts(form);
             const jobId = data.jobIdList && data.jobIdList[0];
+            if (speakerReservation && window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.commit === 'function' && jobId) {
+              window.AgiloFreeSpeakerTrial.commit(jobId, { requestId: speakerReservation.requestId, source: speakerSource });
+            }
             if (jobId) {
               localStorage.setItem('currentJobId', jobId);
               document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
               var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
               var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', {
+                detail: {
+                  sessionId: recordSessionId,
+                  jobId: jobId,
+                  speakersUsed: speakersAllowed,
+                  source: speakerSource,
+                  trialRequestId: speakerReservation && speakerReservation.requestId
+                }
+              }));
+            } else if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
             }
             if (successDiv) successDiv.style.display = 'flex';
             if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
             checkTranscriptStatus(jobId, email);
             if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
           } else {
-            document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
+            if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              if (window.AgiloFreeSpeakerTrial.isCertainRejection(null, data)) {
+                window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+              } else {
+                window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+              }
+            }
+            document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+              detail: {
+                errorMessage: (data && data.errorMessage) || '',
+                speakersUsed: speakersAllowed,
+                source: speakerSource,
+                trialRequestId: speakerReservation && speakerReservation.requestId
+              }
+            }));
+            const err = (data && data.errorMessage) || '';
             if (!resolveAndShowUploadError(data)) {
-              const err = (data && data.errorMessage) || '';
               console.error('[AGILO:UPLOAD] Erreur non mappée:', err);
               showBusinessProcessingError(window.agiloJobErrorParts(data, err).primary);
             }
@@ -1050,7 +1169,21 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
           console.error('Erreur lors de l\'envoi:', err);
-          document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: err && err.message || '' } }));
+          if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+            if (window.AgiloFreeSpeakerTrial.isCertainRejection(err, null)) {
+              window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+            } else {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+            }
+          }
+          document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+            detail: {
+              errorMessage: err && err.message || '',
+              speakersUsed: speakersAllowed,
+              source: speakerSource,
+              trialRequestId: speakerReservation && speakerReservation.requestId
+            }
+          }));
           if (err && err.type === 'timeout') {
             if (defaultErrorTextNode) {
               defaultErrorTextNode.innerHTML =
@@ -1076,41 +1209,360 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setSummaryUI('hidden');
 
-  // ⭐ BLOCAGE YOUTUBE POUR FREE : Fonctionnalité réservée aux abonnements Pro & Business
-  const TIMEOUT_TOAST = 6000;
+  /* ─── Free upsell : popup Memberstack uniquement (pas de carte, pas de CSS toggles) ─── */
+  const MS_PRICE_PRO = 'prc_pro-qn9f07eb';
+  const MS_PRICE_BUSINESS = 'prc_business-1-seat-aj1780sye';
 
-  const toast = (msg, extra = null, ms = TIMEOUT_TOAST) => {
-    const el = Object.assign(document.createElement("div"), { innerHTML: msg });
-    el.style.cssText = "position:fixed;left:20px;bottom:20px;background:#111;color:#fff;padding:8px 14px;border-radius:6px;font-size:14px;z-index:999999;opacity:0;transition:opacity .25s;max-width:92vw;box-shadow:0 8px 24px rgba(0,0,0,.25)";
-    if (extra) el.appendChild(extra);
-    document.body.appendChild(el);
-    requestAnimationFrame(() => el.style.opacity = 1);
-    if (ms !== Infinity) setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 350) }, ms);
-    return el;
-  };
+  function injectFreeUpsellCss() {
+    if (document.getElementById('agilo-free-upsell-css')) return;
+    const style = document.createElement('style');
+    style.id = 'agilo-free-upsell-css';
+    // Ne jamais styler .checkbox_toggle / .w-checkbox-input — rendu Webflow uniquement
+    style.textContent = [
+      '@keyframes agiloFreeFadeIn{from{opacity:0}to{opacity:1}}',
+      '@keyframes agiloFreeSlideUp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}',
+      '.blocker,.blocker-overlay{display:none!important;pointer-events:none!important;opacity:0!important}',
+      '#agilo-free-desire-card{display:none!important}',
+      '.agilo-pro-badge{display:none!important}',
+      '#agilo-free-upgrade-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFreeFadeIn .2s ease}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloFreeSlideUp .25s ease}',
+      '#agilo-free-upgrade-modal h3{margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-reason{margin:0 0 .75rem;font-size:.88rem;line-height:1.55;color:#525252}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-benefits{margin:0 0 1.35rem;padding:0 0 0 1.15rem;text-align:left;font-size:.86rem;line-height:1.5;color:#333;list-style:disc}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-benefits li{margin:0 0 .35rem}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-primary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.75rem 1rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.92rem;font-weight:600;cursor:pointer;font-family:inherit}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-secondary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.65rem 1rem;margin-top:.55rem;background:transparent;color:#174a96;border:1.5px solid #174a96;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-ghost{display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline}',
+      '#agilo-free-upgrade-modal .agilo-free-compare{display:block;margin:.55rem auto 0;font-size:.8rem;color:#174a96;text-decoration:underline}',
+      '#agilo-free-upgrade-modal .agilo-free-close{position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem}'
+    ].join('');
+    document.head.appendChild(style);
+  }
 
-  const triggerUpgrade = () => {
-    const existing = document.querySelector('[data-ms-price\\:update^="prc_pro-"]') ||
-                     document.querySelector('[data-ms-price\\:update*="pro"]') ||
-                     document.querySelector('a[href*="pro"]') ||
-                     document.querySelector('a[href*="upgrade"]');
-    if (existing) { existing.click(); return; }
-    toast("Veuillez passer à un abonnement Pro ou Business pour accéder à cette fonctionnalité.");
-  };
+  function trackFreeUpsell(source, minPlan) {
+    try {
+      if (window.posthog && typeof window.posthog.capture === 'function') {
+        window.posthog.capture('free_upsell_click', { source: source || 'unknown', minPlan: minPlan || 'pro' });
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function clickMsPriceOrFallback(priceId, fallbackPath, excludeEl) {
+    const sel = '[data-ms-price\\:update="' + priceId + '"]';
+    const isPro = priceId.indexOf('prc_pro') === 0;
+    const hidden = document.querySelector(isPro ? '.ms-upgrade-pro' : '.ms-upgrade-business');
+    if (hidden && hidden !== excludeEl) {
+      hidden.click();
+      return;
+    }
+    const existing = Array.from(document.querySelectorAll(sel)).find(el => el !== excludeEl);
+    if (existing) {
+      existing.click();
+      return;
+    }
+    const link = document.querySelector(
+      isPro
+        ? 'a[href*="sign-up-pro"]'
+        : 'a[href*="sign-up-ent"], a[href*="sign-up-business"]'
+    );
+    if (link) {
+      link.click();
+      return;
+    }
+    window.location.href = fallbackPath;
+  }
+
+  function freeUpgradeBenefits(minPlan, source) {
+    if (minPlan === 'ent') {
+      return [
+        'Joignez jusqu’à 5 PDF, DOCX, TXT de contexte',
+        'Noms et termes mieux reconnus',
+        'Compte rendu plus précis',
+        'IA 100 % française (Business)'
+      ];
+    }
+    if (source === 'maestro_docs') {
+      return [
+        'Joignez 1 PDF, DOCX ou TXT de contexte',
+        'Noms et termes mieux reconnus',
+        'Compte rendu plus fiable',
+        'Et les atouts Pro (intervenants, modèles…)'
+      ];
+    }
+    return [
+      'Intervenants identifiés automatiquement',
+      'Modèles de compte rendu personnalisés',
+      'Traduction de la transcription',
+      'Transcription YouTube'
+    ];
+  }
+
+  function showFreeUpgradeModal(opts) {
+    const options = opts || {};
+    const minPlan = options.minPlan === 'ent' ? 'ent' : 'pro';
+    const source = options.source || 'modal';
+    const reason = options.reason || (minPlan === 'ent'
+      ? 'Joignez des documents pour un contexte plus précis.'
+      : source === 'maestro_docs'
+        ? 'Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.'
+        : 'Débloquez les outils qui font gagner du temps sur chaque fichier.');
+
+    trackFreeUpsell(source, minPlan);
+
+    // Free : notre modale Memberstack prime (pas AgiloGate en premier)
+    try {
+      injectFreeUpsellCss();
+      const prev = document.getElementById('agilo-free-upgrade-modal');
+      if (prev) prev.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'agilo-free-upgrade-modal';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      const panel = document.createElement('div');
+      panel.className = 'agilo-free-modal-panel';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'agilo-free-close';
+      closeBtn.setAttribute('aria-label', 'Fermer');
+      closeBtn.textContent = '\u00D7';
+      closeBtn.onclick = () => overlay.remove();
+
+      const h3 = document.createElement('h3');
+      // Titres désir (meilleure conversion que « Passez en… »)
+      h3.textContent = minPlan === 'ent'
+        ? 'Des transcriptions plus précises'
+        : source === 'maestro_docs'
+          ? 'Des comptes rendus plus fiables'
+          : 'Gagnez du temps sur chaque fichier';
+
+      const p = document.createElement('p');
+      p.className = 'agilo-free-modal-reason';
+      p.textContent = reason;
+
+      const ul = document.createElement('ul');
+      ul.className = 'agilo-free-modal-benefits';
+      freeUpgradeBenefits(minPlan, source).forEach(text => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        ul.appendChild(li);
+      });
+
+      const btnPro = document.createElement('button');
+      btnPro.type = 'button';
+      btnPro.className = minPlan === 'ent' ? 'agilo-free-btn-secondary' : 'agilo-free-btn-primary';
+      btnPro.setAttribute('data-ms-price:update', MS_PRICE_PRO);
+      btnPro.textContent = 'Passer en Pro — 7 jours gratuits';
+      btnPro.onclick = () => {
+        overlay.remove();
+        clickMsPriceOrFallback(MS_PRICE_PRO, '/auth/sign-up-pro', btnPro);
+      };
+
+      const btnBiz = document.createElement('button');
+      btnBiz.type = 'button';
+      btnBiz.className = minPlan === 'ent' ? 'agilo-free-btn-primary' : 'agilo-free-btn-secondary';
+      btnBiz.setAttribute('data-ms-price:update', MS_PRICE_BUSINESS);
+      btnBiz.textContent = minPlan === 'ent'
+        ? 'Passer en Business (100% français)'
+        : 'Ou Business (100% français)';
+      btnBiz.onclick = () => {
+        overlay.remove();
+        clickMsPriceOrFallback(MS_PRICE_BUSINESS, '/auth/sign-up-ent', btnBiz);
+      };
+
+      const compare = document.createElement('a');
+      compare.className = 'agilo-free-compare';
+      compare.href = 'https://www.agilotext.com/tarifs';
+      compare.target = '_blank';
+      compare.rel = 'noopener noreferrer';
+      compare.textContent = 'Comparer les plans';
+
+      const later = document.createElement('button');
+      later.type = 'button';
+      later.className = 'agilo-free-btn-ghost';
+      later.textContent = 'Plus tard';
+      later.onclick = () => overlay.remove();
+
+      panel.appendChild(closeBtn);
+      panel.appendChild(h3);
+      panel.appendChild(p);
+      panel.appendChild(ul);
+      if (minPlan === 'ent') {
+        panel.appendChild(btnBiz);
+        panel.appendChild(btnPro);
+      } else {
+        panel.appendChild(btnPro);
+        panel.appendChild(btnBiz);
+      }
+      panel.appendChild(compare);
+      panel.appendChild(later);
+      overlay.appendChild(panel);
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+      return;
+    } catch (err) {
+      if (window.AgiloGate && typeof window.AgiloGate.showUpgrade === 'function') {
+        window.AgiloGate.showUpgrade(minPlan, reason);
+      }
+    }
+  }
+
+  window.AgiloFreeUpgrade = { show: showFreeUpgradeModal };
+
+  function removeFreeDesireCard() {
+    const card = document.getElementById('agilo-free-desire-card');
+    if (card) card.remove();
+  }
+
+  function hideWebflowUnlockHeading() {
+    const root = document.querySelector('.options-wrapper, .wrapper-pro');
+    if (!root) return;
+    root.querySelectorAll('*').forEach(el => {
+      if (el.childElementCount) return;
+      const t = (el.textContent || '').trim();
+      if (/Débloquez les fonctionnalités/i.test(t)) {
+        const hideEl = el.closest('.text-block, .div-block, p, h2, h3, h4') || el;
+        hideEl.style.display = 'none';
+      }
+    });
+  }
+
+  function forceToggleVisualOff(checkboxEl) {
+    if (!checkboxEl) return;
+    checkboxEl.checked = false;
+    checkboxEl.setAttribute('aria-disabled', 'true');
+    const root = checkboxEl.closest('.checkbox-component, .w-checkbox, label') || checkboxEl.parentElement;
+    if (!root) return;
+    root.querySelectorAll('.checkbox_toggle, .w-checkbox-input').forEach(v => {
+      v.classList.remove('w--redirected-checked');
+    });
+  }
+
+  /** Free : option autorisée — défaut ON une seule fois (pas de lock / popup). */
+  function ensureFreeToggleDefaultOn(checkboxEl, flagAttr) {
+    if (!checkboxEl) return;
+    if (checkboxEl.getAttribute(flagAttr) === '1') return;
+    checkboxEl.setAttribute(flagAttr, '1');
+    checkboxEl.checked = true;
+    checkboxEl.removeAttribute('aria-disabled');
+    const root = checkboxEl.closest('.checkbox-component, .w-checkbox, label') || checkboxEl.parentElement;
+    if (!root) return;
+    root.querySelectorAll('.checkbox_toggle, .w-checkbox-input').forEach(v => {
+      v.classList.add('w--redirected-checked');
+    });
+  }
+
+  function ensureFreeSummaryDefaultOn() {
+    ensureFreeToggleDefaultOn(summaryCheckbox, 'data-agilo-summary-defaulted');
+  }
+
+  function removeInjectedProBadges(scope) {
+    const root = scope || document;
+    root.querySelectorAll('.agilo-pro-badge').forEach(b => b.remove());
+  }
+
+  function lockFreeCheckbox(el, reason, source) {
+    if (!el) return;
+    const wrap = el.closest('.checkbox-component, .w-checkbox') || el.closest('label') || el.parentElement;
+    if (!wrap) return;
+
+    // Pas de classe visuelle sur les toggles Webflow — uniquement comportement
+    forceToggleVisualOff(el);
+    removeInjectedProBadges(wrap);
+    requestAnimationFrame(() => forceToggleVisualOff(el));
+
+    if (wrap.getAttribute('data-agilo-free-locked') === '1') return;
+    wrap.setAttribute('data-agilo-free-locked', '1');
+
+    const open = e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      forceToggleVisualOff(el);
+      requestAnimationFrame(() => forceToggleVisualOff(el));
+      showFreeUpgradeModal({ minPlan: 'pro', reason: reason, source: source });
+    };
+
+    wrap.addEventListener('click', open, true);
+    el.addEventListener('change', open, true);
+  }
+
+  function lockFreeSelect(selectEl, reason, source) {
+    if (!selectEl) return;
+    selectEl.setAttribute('aria-disabled', 'true');
+    selectEl.setAttribute('tabindex', '-1');
+    selectEl.style.pointerEvents = 'none';
+
+    const hit = selectEl.parentElement || selectEl;
+    removeInjectedProBadges(hit);
+
+    if (hit.getAttribute('data-agilo-free-locked') === '1') return;
+    hit.setAttribute('data-agilo-free-locked', '1');
+
+    hit.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showFreeUpgradeModal({ minPlan: 'pro', reason: reason, source: source });
+    }, true);
+  }
+
+  function lockCreateModelLink() {
+    const createModelLink = Array.from(document.querySelectorAll('a, button')).find(el => {
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      return /\+?\s*Créer un modèle/i.test(t);
+    });
+    if (!createModelLink) return;
+    removeInjectedProBadges(createModelLink);
+    if (createModelLink.getAttribute('data-agilo-free-locked') === '1') return;
+    createModelLink.setAttribute('data-agilo-free-locked', '1');
+    createModelLink.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showFreeUpgradeModal({
+        minPlan: 'pro',
+        reason: 'Créez vos modèles de compte rendu.',
+        source: 'create_template'
+      });
+    }, true);
+  }
+
+  function initFreeOptionLocks() {
+    injectFreeUpsellCss();
+    removeFreeDesireCard();
+    ensureFreeSummaryDefaultOn();
+    // Format + speakers : exclusivité et défaut gérés par AgiloFreeSpeakerTrial
+    // #toggle-summary + #toggle-format-transcript : libres sur Free
+    lockFreeCheckbox(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
+    lockFreeSelect(
+      document.getElementById('default-template-select'),
+      'Utilisez des modèles de compte rendu prêts à l’emploi.',
+      'template_select'
+    );
+    lockCreateModelLink();
+    removeInjectedProBadges(document.querySelector('.options-wrapper') || document);
+  }
 
   const showUpsell = () => {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:8px";
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = "Passer en Pro";
-    btn.style.cssText = "background:#28a745;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-weight:600";
-    btn.onclick = triggerUpgrade;
-    wrap.appendChild(btn);
-
-    toast("🚫 Fonction réservée aux offres Pro & Business. Passez en Pro pour débloquer la transcription YouTube.", wrap, TIMEOUT_TOAST);
+    showFreeUpgradeModal({
+      minPlan: 'pro',
+      reason: 'Transcrivez des vidéos YouTube directement depuis le tableau de bord.',
+      source: 'youtube'
+    });
   };
+
+  removeFreeDesireCard();
+  hideWebflowUnlockHeading();
+  initFreeOptionLocks();
+  [300, 1000].forEach(ms => {
+    setTimeout(() => {
+      removeFreeDesireCard();
+      hideWebflowUnlockHeading();
+      initFreeOptionLocks();
+    }, ms);
+  });
 
   // Expose globals for mount-streaming.js (dictee en direct)
   window.ensureValidToken = ensureValidToken;

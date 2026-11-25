@@ -403,8 +403,56 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'file';
   }
 
+
+  function isSessionIso(value) {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(String(value || ''));
+  }
+
+  function recorderFacts(formEl) {
+    var originEl = formEl && formEl.querySelector('input[name="agilo_audio_origin"]');
+    var atEl = formEl && formEl.querySelector('input[name="agilo_recorded_at"]');
+    var recordedAt = atEl && String(atEl.value || '').trim();
+    return {
+      origin: originEl && originEl.value === 'enregistreur_web' ? 'enregistreur_web' : '',
+      recordedAt: recordedAt && isSessionIso(recordedAt) ? recordedAt : ''
+    };
+  }
+
+  function clearRecorderFacts(formEl) {
+    ['agilo_audio_origin', 'agilo_recorded_at'].forEach(function (name) {
+      var el = formEl && formEl.querySelector('input[name="' + name + '"]');
+      if (el) el.value = '';
+    });
+  }
+
+  function audioFileCount(target) {
+    if (!target || typeof target.getAll !== 'function') return 0;
+    var n = 0;
+    for (var i = 1; i <= 12; i++) n += target.getAll('fileUpload' + i).length;
+    return n;
+  }
+
+  function appendAudioFacts(target, formEl) {
+    if (!target || typeof target.append !== 'function') return;
+    try {
+      target.delete('agilo_audio_origin');
+      target.delete('agilo_recorded_at');
+      target.delete('audioOrigin');
+      target.delete('recordedAt');
+    } catch (e) { /* ignore */ }
+    var facts = recorderFacts(formEl);
+    if (facts.origin === 'enregistreur_web' && facts.recordedAt && audioFileCount(target) === 1) {
+      target.append('audioOrigin', 'enregistreur_web');
+      target.append('recordedAt', facts.recordedAt);
+      return;
+    }
+    target.append('audioOrigin', 'import');
+  }
+
   function captureTranscriptCreated(source) {
     try {
+      var facts = recorderFacts(typeof form !== 'undefined' ? form : null);
+      var recordedAtPresent = source !== 'youtube' && source !== 'dictation' && facts.origin === 'enregistreur_web' && !!facts.recordedAt;
       if (!window.posthog || typeof window.posthog.capture !== 'function') return;
       var host = String((window.location && window.location.hostname) || '');
       var environment = (host === 'www.agilotext.com' || host === 'agilotext.com') ? 'production' : 'recette';
@@ -417,9 +465,13 @@ document.addEventListener('DOMContentLoaded', function () {
       window.posthog.capture('transcript_created', {
         origine: origine,
         edition: offer,
-        environment: environment
+        environment: environment,
+        recorded_at_present: recordedAtPresent
       });
     } catch (err) { /* l'envoi continue */ }
+    finally {
+      clearRecorderFacts(typeof form !== 'undefined' ? form : null);
+    }
   }
 
   /* ─── YouTube validation ───────────────────────────────────── */
@@ -1010,6 +1062,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             fd.delete('fileToUpload'); fd.delete('audioFile');
             fd.append('fileUpload1', file, file.name);
+            appendAudioFacts(fd, form);
             fd.append('deviceId', window.DEVICE_ID || '');
             fd.append('mailTranscription', 'true');
             return maybeEnrichAndSend(fd, false);

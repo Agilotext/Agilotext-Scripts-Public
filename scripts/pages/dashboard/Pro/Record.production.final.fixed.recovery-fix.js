@@ -382,6 +382,7 @@
   let stopInProgress = false;
   let uploadConfirmed = false;
   let recordSessionId = null; // évite clear backup cross-feature (agilo-upload-confirmed avec detail.sessionId)
+  let recordStartedAt = null; // premier appui Enregistrer, pas l'heure d'arrêt
   let onstopTimeoutId = null;
   let recordAbortedByTimeout = false;
   let uploadConfirmedFallbackTimerId = null;
@@ -1064,9 +1065,62 @@
     return 'audio/webm';
   }
 
+
+  function localOffsetIso(date) {
+    var pad = function (n) { return String(Math.abs(Math.trunc(n))).padStart(2, '0'); };
+    var offsetMin = -date.getTimezoneOffset();
+    var sign = offsetMin >= 0 ? '+' : '-';
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds()) + sign + pad(Math.floor(Math.abs(offsetMin) / 60)) + ':' + pad(Math.abs(offsetMin) % 60);
+  }
+
+  function ensureHiddenInput(formEl, name) {
+    if (!formEl) return null;
+    var el = formEl.querySelector('input[name="' + name + '"]');
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'hidden';
+      el.name = name;
+      formEl.appendChild(el);
+    }
+    return el;
+  }
+
+  function clearHiddenRecordFacts(formEl) {
+    ['agilo_audio_origin', 'agilo_recorded_at'].forEach(function (name) {
+      var el = formEl && formEl.querySelector('input[name="' + name + '"]');
+      if (el) el.value = '';
+    });
+  }
+
+  function forgetRecordStart() {
+    recordStartedAt = null;
+    clearHiddenRecordFacts(form);
+  }
+
+  function stampRecordedAt(formEl) {
+    var origin = ensureHiddenInput(formEl, 'agilo_audio_origin');
+    var at = ensureHiddenInput(formEl, 'agilo_recorded_at');
+    if (origin) origin.value = 'enregistreur_web';
+    if (at) at.value = recordStartedAt ? localOffsetIso(recordStartedAt) : '';
+    recordStartedAt = null;
+  }
+
+  function bindFileOriginGuard(fileInput) {
+    if (!fileInput || fileInput.dataset.agiloOriginGuard === '1') return;
+    fileInput.dataset.agiloOriginGuard = '1';
+    fileInput.addEventListener('change', function (event) {
+      if (!event.isTrusted) return;
+      clearHiddenRecordFacts(fileInput.form || form);
+    });
+  }
+
+  bindFileOriginGuard(form && form.querySelector('input[type="file"]'));
+
   function startRecording(stream) {
     uploadConfirmed = false;
     recordSessionId = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    recordStartedAt = null;
+    clearHiddenRecordFacts(form);
     recordAbortedByTimeout = false;
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     restartMicAttempts = 0;
@@ -1157,6 +1211,7 @@
           currentScreenStream = null;
           teardownAudioGraph();
           mediaRecorder = null;
+          forgetRecordStart();
           return;
         }
 
@@ -1187,6 +1242,9 @@
           form.appendChild(hiddenSessionId);
         }
         if (hiddenSessionId) hiddenSessionId.value = recordSessionId || '';
+
+        stampRecordedAt(form);
+        bindFileOriginGuard(form && form.querySelector('input[type="file"]'));
 
         const fileInput = form && form.querySelector('input[type="file"]');
         const pondInstance = window.FilePond && fileInput ? (() => {
@@ -1346,9 +1404,12 @@
         stopStreamTracks(currentScreenStream);
         currentScreenStream = null;
         teardownAudioGraph();
+        forgetRecordStart();
         return;
       }
     }
+
+    recordStartedAt = new Date();
 
     // [INJECTED V2]
     WakeLockManager.request();
@@ -1429,6 +1490,7 @@
           mediaRecorder.stop();
         } catch (e) {
           warn('Erreur lors de l\'arrêt du MediaRecorder:', e);
+          forgetRecordStart();
           stopInProgress = false;
           if (screenVideoTrack && onScreenEnded) {
             try {
@@ -1453,6 +1515,7 @@
       onstopTimeoutId = setTimeout(function forceCleanupAfterStopTimeout() {
         onstopTimeoutId = null;
         recordAbortedByTimeout = true; // onstop tardif sera ignoré
+        forgetRecordStart();
         if (!stopInProgress) return;
         try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.requestData(); } catch (e) { }
         stopStreamTracks(currentMicStream);
