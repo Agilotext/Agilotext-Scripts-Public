@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.13-native-click
+   AGILOTEXT — Mes transcripts logic v2.2.15-list-pages
+   v2.2.15-list-pages — une première page courte n’arrête plus la liste si le serveur en annonce d’autres.
    v2.2.13-native-click — transcription et compte rendu : pas de nom forcé, le clic du navigateur part.
    v2.2.12-summary-native — compte rendu déjà bon : le navigateur charge le lien, nom du serveur.
    v2.2.11-investigation-pv — sanitize clone PV (cursor pointer idle, pas de verifying copié).
@@ -30,7 +31,34 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.13-native-click';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.15-list-pages';
+
+  function dedupeJobsById(jobs) {
+    const jobsById = new Map();
+    (jobs || []).forEach((job) => {
+      if (!job || job.jobid == null || job.jobid === '') return;
+      jobsById.set(String(job.jobid), job);
+    });
+    return Array.from(jobsById.values());
+  }
+
+  function serverJobTotal(data) {
+    const n = Number(data && data.totalCount);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+  }
+
+  function shouldFetchMoreJobPages(uniqueCount, rawCount, serverTotal) {
+    if (!rawCount) return false;
+    if (serverTotal != null && uniqueCount >= serverTotal) return false;
+    return true;
+  }
+
+  function isJobListComplete(uniqueCount, serverTotal, reachedEnd) {
+    if (!reachedEnd) return false;
+    if (serverTotal != null && uniqueCount < serverTotal) return false;
+    return true;
+  }
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -2096,7 +2124,7 @@
       return { data, editionUsed: ed };
     }
 
-    async function fetchRemainingBatches(ed) {
+    async function fetchRemainingBatches(ed, serverTotal) {
       let offset = FETCH_LIMIT_INITIAL;
       let reachedEnd = false;
       while (offset < FETCH_LIMIT_TOTAL && activeLoadToken === loadId) {
@@ -2120,7 +2148,7 @@
         offset += FETCH_LIMIT_INITIAL;
       }
       if (activeLoadToken === loadId) {
-        cacheTotalKnown = reachedEnd;
+        cacheTotalKnown = isJobListComplete(allJobsCache.length, serverTotal, reachedEnd);
         if (!reachedEnd && (allJobsCache?.length || 0) >= FETCH_LIMIT_TOTAL) {
           console.warn(
             '[Agilo] fetch limit reached:',
@@ -2263,7 +2291,9 @@
         return null;
       }
 
-      allJobsCache = (data.jobsInfoDtos || []).map(applySummaryProbeToJob);
+      const rawJobs = data.jobsInfoDtos || [];
+      const serverTotal = serverJobTotal(data);
+      allJobsCache = dedupeJobsById(rawJobs.map(applySummaryProbeToJob));
       console.info(
         '[Agilo] fetch all start',
         allJobsCache.length,
@@ -2274,8 +2304,8 @@
 
       await loadPageFromCache(page);
 
-      if (allJobsCache.length >= FETCH_LIMIT_INITIAL) {
-        fetchRemainingBatches(edition).catch((e) =>
+      if (shouldFetchMoreJobPages(allJobsCache.length, rawJobs.length, serverTotal)) {
+        fetchRemainingBatches(edition, serverTotal).catch((e) =>
           console.warn('[Agilo] bg fetch err', e)
         );
       } else {
