@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.19';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.20-no-cleanup';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -28,7 +28,6 @@
     free: Object.freeze({ day: 10, month: 100, pseudo: false, restore: false, maxFiles: 3 }),
     agiloshield: Object.freeze({ day: 250, month: 5000, pseudo: true, restore: true, maxFiles: 12 })
   });
-  const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
   const POLL_INTERVAL_MS = 2500;
   const STATUS_REQUEST_TIMEOUT = 20000;
@@ -791,7 +790,9 @@
     const normalized = normalizeEdition(state.edition);
     if (state.edition !== normalized) state.edition = normalized;
     if (normalized === 'agiloshield') {
-      return state.transcriptionEdition || 'free';
+      const transcription = normalizeEdition(state.transcriptionEdition);
+      if (transcription === 'ent' || transcription === 'pro' || transcription === 'free') return transcription;
+      return 'ent';
     }
     if (normalized === 'ent' || normalized === 'pro' || normalized === 'free') return normalized;
     return 'free';
@@ -2947,7 +2948,7 @@
     const hasClassic = !!(member && hasMemberstackAnonProPlan(plans, hasPlan));
     if (member) {
       if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) state.transcriptionEdition = 'ent';
-      else if (hasPlan('pln_business')) state.transcriptionEdition = 'ent';
+      else if (hasPlan('pln_business') || hasPlan('pln_cse-')) state.transcriptionEdition = 'ent';
       else if (hasPlan('pln_pro')) state.transcriptionEdition = 'pro';
       else if (hasPlan('pln_free')) state.transcriptionEdition = 'free';
       else state.transcriptionEdition = 'free';
@@ -3081,12 +3082,6 @@
     }
     storage.set('agilo:username', state.email);
     storage.set('agilo:edition', state.edition);
-  }
-
-  async function runSessionMaintenance() {
-    if (!state.email || !state.token) return;
-    const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(getEditionForApi());
-    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
   }
 
   async function loadApiVersion() {
@@ -4187,14 +4182,6 @@
     syncInclusionUiVisibility();
   }
 
-  function shouldCallApiMeta() {
-    if (!ui.apiMeta) return false;
-    const footer = ui.apiMeta.closest('.agf-api-footer');
-    if (!footer) return false;
-    const styles = window.getComputedStyle(footer);
-    return styles.display !== 'none' && styles.visibility !== 'hidden';
-  }
-
   function bindEvents() {
     ui.form.addEventListener('submit', submitFiles);
     if (ui.reset) ui.reset.addEventListener('click', resetFiles);
@@ -4625,9 +4612,6 @@
     applyEditionLocks();
     applyFeatureAvailability();
     renderRestorePanel();
-    if (shouldCallApiMeta()) {
-      runSessionMaintenance();
-    }
     loadAnonJobsList().catch(function () { });
   }
 
